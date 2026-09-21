@@ -1,0 +1,5 @@
+*.brs
+*-compileError.txt
+test-results.txt
+Tests.br
+!Bitris.br

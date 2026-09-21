@@ -1,0 +1,111 @@
+dim bricks(6,10),ballX(3),ballY(3),ballVX(3),ballVY(3),ballOn(3)
+GameInit: !
+  paddleX=20 : wideUntil=0 : capsuleY=0 : brickHits=0
+  gosub BrickWave
+return
+BrickWave: !
+  mat bricks=(1) : bricksLeft=60
+  gosub ServeReady
+return
+ServeReady: !
+  mat ballOn=(0) : serving=1 : capsuleY=0
+  notice$='SPACE TO SERVE / CATCH W FOR WIDE OR M FOR MULTIBALL'
+return
+GameInput: !
+  if key$='A' or key$=chr$(14) then paddleX=max(6,paddleX-2)
+  if key$='D' or key$=chr$(12) then paddleX=min(35,paddleX+2)
+  if key$=' ' and serving then
+    serving=0 : ballOn(1)=1 : ballX(1)=paddleX : ballY(1)=25
+    ballVX(1)=7 : ballVY(1)=-13-min(6,level)
+    fn_sfx('shot')
+  end if
+return
+GameTick: ! Small physics substeps keep fast balls from tunneling through bricks.
+  paddleHalf=3
+  if gameTime<wideUntil then paddleHalf=5
+  if serving=0 then
+    steps=max(1,int(dt/.012)+1) : stepTime=dt/steps
+    for physicsStep=1 to steps
+      for bn=1 to 3
+        if ballOn(bn) then gosub StepBall
+      next bn
+    next physicsStep
+    activeBalls=0
+    for bn=1 to 3
+      activeBalls=activeBalls+ballOn(bn)
+    next bn
+    if activeBalls=0 then lives=lives-1 : gosub ServeReady
+  end if
+  if capsuleY>0 then
+    capsuleY=capsuleY+dt*7
+    if capsuleY>=25 and abs(capsuleX-paddleX)<=paddleHalf+1 then
+      if capsuleType=1 then
+        wideUntil=gameTime+12 : notice$='WIDE PADDLE / 12 SECONDS'
+      else
+        for bn=1 to 3
+          if ballOn(bn)=0 then
+            ballOn(bn)=1 : ballX(bn)=paddleX : ballY(bn)=24
+            ballVX(bn)=(bn-2)*9 : ballVY(bn)=-15
+          end if
+        next bn
+        serving=0 : notice$='MULTIBALL!'
+      end if
+      capsuleY=0 : score=score+25
+      fn_sfx('power')
+    end if
+    if capsuleY>28 then capsuleY=0
+  end if
+  if bricksLeft=0 then level=level+1 : score=score+500 : gosub BrickWave
+return
+StepBall: !
+  priorX=ballX(bn) : priorY=ballY(bn)
+  ballX(bn)=ballX(bn)+ballVX(bn)*stepTime
+  ballY(bn)=ballY(bn)+ballVY(bn)*stepTime
+  if ballX(bn)<1 then ballX(bn)=1 : ballVX(bn)=abs(ballVX(bn))
+  if ballX(bn)>40 then ballX(bn)=40 : ballVX(bn)=-abs(ballVX(bn))
+  if ballY(bn)<1 then ballY(bn)=1 : ballVY(bn)=abs(ballVY(bn))
+  if ballVY(bn)>0 and priorY<26 and ballY(bn)>=26 and abs(ballX(bn)-paddleX)<=paddleHalf+1 then
+    ballY(bn)=25.9 : ballVY(bn)=-abs(ballVY(bn))
+    ballVX(bn)=(ballX(bn)-paddleX)*3
+    fn_sfx('bounce')
+  end if
+  hitRow=int(ballY(bn)+.5) : hitCol=int(ballX(bn)+.5)
+  br=int((hitRow-3)/2)+1 : bc=int((hitCol-1)/4)+1
+  if hitRow>=3 and hitRow<=13 and hitCol>=1 and hitCol<=40 then
+    if mod(hitRow-3,2)=0 and mod(hitCol-1,4)<3 and bricks(br,bc) then
+      bricks(br,bc)=0 : bricksLeft=bricksLeft-1 : score=score+(7-br)*10 : brickHits=brickHits+1
+      if priorX<(bc-1)*4+.5 or priorX>(bc-1)*4+3.5 then
+        ballX(bn)=priorX : ballVX(bn)=-ballVX(bn)
+      else
+        ballY(bn)=priorY : ballVY(bn)=-ballVY(bn)
+      end if
+      if mod(brickHits,7)=0 and capsuleY=0 then
+        capsuleX=(bc-1)*4+2 : capsuleY=br*2+1 : capsuleType=1+mod(int(brickHits/7),2)
+      end if
+    end if
+  end if
+  if ballY(bn)>28 then ballOn(bn)=0
+return
+GameRender: !
+  for br=1 to 6
+    for bc=1 to 10
+      if bricks(br,bc) then
+        for cell=0 to 2
+          fn_dot((bc-1)*4+cell+1,br*2+1,'  ',13+mod(br-1,5))
+        next cell
+      end if
+    next bc
+  next br
+  paddleHalf=3
+  if gameTime<wideUntil then paddleHalf=5
+  for cell=-paddleHalf to paddleHalf
+    fn_dot(paddleX+cell,26,'  ',17)
+  next cell
+  if serving then fn_dot(paddleX,25,'()',8)
+  for bn=1 to 3
+    if ballOn(bn) then fn_dot(ballX(bn),ballY(bn),'()',8)
+  next bn
+  if capsuleY>0 then
+    if capsuleType=1 then fn_dot(capsuleX,capsuleY,'W ',6) else fn_dot(capsuleX,capsuleY,'M ',4)
+  end if
+return

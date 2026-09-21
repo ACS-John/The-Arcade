@@ -1,0 +1,122 @@
+dim maze(27,39),dots(27,39),ghostX(4),ghostRow(4),ghostDir(4),mx(4),my(4)
+GameInit: !
+  mx(1)=-1 : my(1)=0 : mx(2)=1 : my(2)=0 : mx(3)=0 : my(3)=-1 : mx(4)=0 : my(4)=1
+  gosub MazeWave
+return
+MazeWave: ! Intersecting corridors form connected loops and central cross passages.
+  mat maze=(1) : mat dots=(0) : dotsLeft=0
+  for mr=2 to 26
+    for mc=2 to 38
+      if mod(mr-2,4)=0 or mc=2 or mc=10 or mc=20 or mc=30 or mc=38 then maze(mr,mc)=0
+      if mr>=10 and mr<=18 and (mc=6 or mc=15 or mc=25 or mc=34) then maze(mr,mc)=0
+      if maze(mr,mc)=0 then dots(mr,mc)=1 : dotsLeft=dotsLeft+1
+    next mc
+  next mr
+  maze(14,1)=0 : maze(14,39)=0
+  dots(2,2)=2 : dots(2,38)=2 : dots(26,2)=2 : dots(26,38)=2
+  gosub MazeSpawn
+  notice$='CLEAR EVERY DOT / O PELLETS LET YOU EAT THE HUNTERS'
+return
+MazeSpawn: !
+  munchX=20 : munchY=26 : munchDir=1 : wantedDir=1
+  ghostX(1)=10 : ghostRow(1)=10 : ghostX(2)=30 : ghostRow(2)=10
+  ghostX(3)=10 : ghostRow(3)=18 : ghostX(4)=30 : ghostRow(4)=18
+  mat ghostDir=(0)
+  moveClock=0 : ghostClock=0 : powerUntil=0 : safeUntil=gameTime+1.5 : combo=0
+return
+GameInput: ! Buffered turn stays pending until the next open intersection.
+  if key$='A' or key$=chr$(14) then wantedDir=1
+  if key$='D' or key$=chr$(12) then wantedDir=2
+  if key$='W' or key$=chr$(11) then wantedDir=3
+  if key$='S' or key$=chr$(10) then wantedDir=4
+return
+def fn_pass(xx,yy)
+  fn_pass=0
+  if yy=14 and (xx=0 or xx=40) then
+    fn_pass=1
+  else if xx>=1 and xx<=39 and yy>=1 and yy<=27 then
+    fn_pass=(maze(yy,xx)==0)
+  end if
+fnend
+GameTick: !
+  moveClock=moveClock+dt : ghostClock=ghostClock+dt
+  if moveClock>=max(.075,.14-.008*(level-1)) then
+    moveClock=0
+    if fn_pass(munchX+mx(wantedDir),munchY+my(wantedDir)) then munchDir=wantedDir
+    if fn_pass(munchX+mx(munchDir),munchY+my(munchDir)) then
+      munchX=munchX+mx(munchDir) : munchY=munchY+my(munchDir)
+      if munchX=0 then munchX=39
+      if munchX=40 then munchX=1
+    end if
+    if dots(munchY,munchX)>0 then
+      if dots(munchY,munchX)=2 then powerUntil=gameTime+7 : score=score+40 : combo=0 : fn_sfx('power')
+      dots(munchY,munchX)=0 : dotsLeft=dotsLeft-1 : score=score+10
+    end if
+  end if
+  gosub MazeCollision
+  if ghostClock>=max(.11,.22-.01*level)+.07*(powerUntil>gameTime) then
+    ghostClock=0
+    for gh=1 to 4
+      targetX=munchX : targetY=munchY
+      if gh=2 then targetX=min(38,max(2,munchX+mx(munchDir)*4))
+      if gh=3 and mod(int(gameTime/8),2)=0 then targetX=2 : targetY=2
+      if gh=4 and abs(ghostX(gh)-munchX)+abs(ghostRow(gh)-munchY)<8 then targetX=38 : targetY=26
+      bestChoice=0 : bestDistance=9999
+      for attempt=1 to 2
+        for gd=1 to 4
+          gx=ghostX(gh)+mx(gd) : gy=ghostRow(gh)+my(gd)
+          reverseMove=0
+          if ghostDir(gh)>0 then reverseMove=(mx(gd)==-mx(ghostDir(gh)) and my(gd)==-my(ghostDir(gh)))
+          if fn_pass(gx,gy) and (attempt=2 or reverseMove=0) then
+            distance=abs(gx-targetX)+abs(gy-targetY)+rnd*.7
+            if powerUntil>gameTime then distance=-distance
+            if distance<bestDistance then bestDistance=distance : bestChoice=gd
+          end if
+        next gd
+        if bestChoice>0 then goto GhostChosen
+      next attempt
+GhostChosen: !
+      if bestChoice>0 then
+        ghostDir(gh)=bestChoice
+        ghostX(gh)=ghostX(gh)+mx(bestChoice) : ghostRow(gh)=ghostRow(gh)+my(bestChoice)
+        if ghostX(gh)=0 then ghostX(gh)=39
+        if ghostX(gh)=40 then ghostX(gh)=1
+      end if
+    next gh
+  end if
+  gosub MazeCollision
+  if dotsLeft=0 then level=level+1 : score=score+1000 : gosub MazeWave
+return
+MazeCollision: ! Called before and after enemy movement so crossing paths counts.
+  for gh=1 to 4
+    if ghostX(gh)=munchX and ghostRow(gh)=munchY then
+      if powerUntil>gameTime then
+        combo=min(4,combo+1) : score=score+100*(2**combo)
+        fn_sfx('power')
+        ghostX(gh)=20 : ghostRow(gh)=14
+      else if gameTime>=safeUntil then
+        lives=lives-1 : gosub MazeSpawn : goto MazeCollisionDone
+      end if
+    end if
+  next gh
+MazeCollisionDone: !
+return
+GameRender: !
+  for mr=1 to 27
+    for mc=1 to 39
+      if maze(mr,mc) then
+        fn_dot(mc,mr,'##',9)
+      else if dots(mr,mc)=1 then
+        fn_dot(mc,mr,'. ',5)
+      else if dots(mr,mc)=2 then
+        fn_dot(mc,mr,'O ',5)
+      end if
+    next mc
+  next mr
+  for gh=1 to 4
+    tint=3+gh
+    if powerUntil>gameTime then tint=3
+    fn_dot(ghostX(gh),ghostRow(gh),'MM',tint)
+  next gh
+  fn_dot(munchX,munchY,'C ',5)
+return

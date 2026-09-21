@@ -1,0 +1,14 @@
+{
+  "mode": "Built-in image generation",
+  "reference": "title.jpg",
+  "images": [
+    {
+      "file": "title-graphic.png",
+      "prompt": "Create a finished extremely wide, shallow game title banner, approximately 3072 x 128 pixels (24:1 aspect ratio), intended to replace two lines at the top of a desktop game. Exact and ONLY text: APHELION. Large, perfectly legible uppercase custom science-fiction lettering centered, wide tracking, luminous ivory with subtle mint highlights and restrained coral edge lighting. Word occupies central 40 percent of banner width and 75 percent of banner height. Background deep midnight violet with dreamy teal and coral nebula wisps, sparse stars, subtle thin orbital arcs stretching to edges. Small paired mint and peach moons as a compact accent to left of word; delicate bioluminescent filaments at far edges. Reference image is ONLY color and world aesthetic reference, not composition: do not repeat landscape or characters. No subtitle, no underline, no border, no other text. Elegant alien atmosphere, rich refined detail, high contrast lettering readable when whole banner displays at 1200 x 44 pixels. Fill entire ultrawide canvas with banner, no padding or mockup."
+    },
+    {
+      "file": "wallpaper.png",
+      "prompt": "Create a finished desktop game background wallpaper for APHELION, landscape 1536x1024 approximately 3:2, no words or logos. Use supplied game illustration as exact world and color continuity reference. Dreamy highly detailed alien science-fiction environment: glowing cyan/emerald filaments and translucent porous organic growths framing the far left and lower corners; distant chalk-white mineral plain under deep violet cosmos with subtle coral twilight at far right; small paired mint and peach moons in upper right edge. Composition specifically supports game UI on top: central 75 percent is very dark midnight indigo atmospheric haze with extremely low contrast texture, upper center and middle left quiet, no bright objects behind text. Rich intricate detail concentrated at the outermost edges and lower margin, edges gently dissolve into dark center. No characters, creature, tower, spaceship, Earth mushrooms, or readable text. Beautiful immersive alien atmosphere, elegant colorful luminous edges, restrained dreamy center. This is a wallpaper asset itself, no mockup or window frame."
+    }
+  ]
+}

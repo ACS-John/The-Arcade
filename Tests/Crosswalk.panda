@@ -1,0 +1,26 @@
+testId$='Crosswalk'
+include: Tests\Start.panda
+testName$='Road collision loses one life and respawns'
+gameTime=10 : frogSafe=0 : frogY=16 : frogX=laneOffset(6)+1
+gosub FrogHazards : passed=(lives==2 and frogY==28) : gosub Assert
+testName$='River gap loses a life'
+frogY=3 : frogX=laneOffset(1)+10 : gosub FrogHazards
+passed=(lives==1 and frogY==28) : gosub Assert
+testName$='Log carries the frog without changing relative position'
+lives=3 : frogY=3 : frogX=laneOffset(1)+3 : previousX=frogX : dt=.1
+gosub GameTick : passed=(abs(frogX-previousX-laneSpeed(1)*dt)<.0001 and lives==3) : gosub Assert
+testName$='Reaching an empty home scores and respawns'
+frogY=2 : frogX=4 : gosub FrogHazards
+passed=(homes(1)==1 and frogY==28 and score>=100) : gosub Assert
+testName$='Occupied home is not awarded twice'
+frogY=2 : frogX=4 : gosub FrogHazards
+passed=(lives==2 and homes(1)==1) : gosub Assert
+testName$='Filling all five homes advances the level'
+for testHome=2 to 5
+  frogY=2 : frogX=testHome*8-4 : gosub FrogHazards
+next testHome
+passed=(level==2 and homes(1)==0 and homes(5)==0) : gosub Assert
+testName$='Trip timer expiration costs one life'
+tripTime=0 : gosub FrogHazards : passed=(lives==1 and tripTime==45) : gosub Assert
+include: Tests\Finish.panda
+include: Crosswalk Chaos\Rules.panda

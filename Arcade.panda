@@ -1,0 +1,68 @@
+! THE ARCADE. Native clickable game selection over custom 1980s artwork.
+dim gameName$(8)*30,gamePath$(8)*120,gameHint$(8)*48,pick$*1
+dim art$*160,menuField$*100
+gameName$(1)='BR INVADERS' : gameHint$(1)='Alien formations / shields / bonus saucers'
+gameName$(2)='PADDLE PANIC' : gameHint$(2)='Brick breaking / wide paddle / multiball'
+gameName$(3)='BYTE MUNCHER' : gameHint$(3)='Maze chasing / power pellets / four hunters'
+gameName$(4)='CROSSWALK CHAOS' : gameHint$(4)='Rush hour traffic / river rides / five homes'
+gameName$(5)='BITIPEDE' : gameHint$(5)='Mushroom fields / segmented swarm / spiders'
+gameName$(6)='BITRIS' : gameHint$(6)='Falling blocks / hold / clear the stack'
+gameName$(7)='APHELION' : gameHint$(7)='An illustrated, narrated alien-world adventure'
+gameName$(8)='QIX' : gameHint$(8)='Neon territory capture / arrows or WASD'
+gamePath$(1)='S:\BR Invaders\BR Invaders.br'
+gamePath$(2)='S:\Paddle Panic\Paddle Panic.br'
+gamePath$(3)='S:\Byte Muncher\Byte Muncher.br'
+gamePath$(4)='S:\Crosswalk Chaos\Crosswalk Chaos.br'
+gamePath$(5)='S:\Bitipede\Bitipede.br'
+gamePath$(6)='S:\Bitris\Bitris.br'
+gamePath$(7)='S:\Aphelion\Aphelion.br'
+execute 'config attribute [CAB_BG]/#DBE7FF:#070B26'
+execute 'config attribute [CAB_HINT]/#A3B3D7:#070B26'
+execute 'config attribute [CAB_EDGE]/#61FFF2:#070B26'
+execute 'config attribute [CAB_BUTTON]S/#FFFFFF:#612273'
+art$='S:\art\arcade.png'
+open #0: 'srow=1,scol=1,rows=48,cols=110,N=[CAB_BG],FONT.LABELS=Consolas:modern:medium,FONT.TEXT=Consolas:modern:medium,FONT.BUTTONS=Consolas:modern:medium,caption=The Arcade,picture='&art$,display,outin
+open #1: 'srow=18,scol=31,rows=29,cols=50,border=s:[CAB_EDGE],N=[CAB_BG],caption= SELECT YOUR GAME ',display,outin
+for game=1 to 8
+  menuField$=str$(2+(game-1)*3)&',3,CC 46,[CAB_BUTTON],B'&str$(1000+game)
+  print #1,fields menuField$: str$(game)&'  /  '&gameName$(game)
+  print #1,fields str$(3+(game-1)*3)&',3,CC 46,[CAB_HINT]': gameHint$(game)
+next game
+print #1,fields '26,3,CC 46,[CAB_EDGE]': 'CLICK A GAME OR TYPE 1-8 + ENTER'
+gosub AudioStart
+MenuWait: !
+  gosub AudioFlush : gosub AudioLabel
+  print #1,fields '28,3,CC 46,[CAB_HINT]': trim$(audioStatus$)&'  /  ESC OR Q + ENTER TO EXIT'
+  pick$=''
+  rinput #0,fields '20,35,C 1,[CAB_BG]',wait=1: pick$ timeout MenuInputDone conv MenuInputDone exit ArcadeQuit
+MenuInputDone: ! The big X (93) shares the Escape/Q cleanup path, including on input interrupts.
+  if fkey=93 or fkey=99 then goto ArcadeQuit
+  if uprc$(pick$)='Q' then goto ArcadeQuit
+  if uprc$(pick$)='M' then gosub AudioToggle : goto MenuWait
+  selected=0
+  if fkey>=1001 and fkey<=1008 then
+    selected=fkey-1000
+  else
+    selected=val(pick$) conv MenuWait
+  end if
+  if selected<1 or selected>8 then goto MenuWait
+  fn_sfx('select') : gosub AudioFlush : sleep(.15) : gosub AudioStop
+  if selected=8 then
+    execute 'system "'&os_filename$('S:\Qix\Qix.exe')&'"'
+    gosub AudioStart
+    goto MenuWait
+  end if
+  setenv('ArcadeReturn','Yes')
+  close #1:
+  chain gamePath$(selected)
+ArcadeQuit: !
+  gosub AudioStop
+  setenv('ArcadeReturn','')
+  close #1:
+  if env$('status.config.application_name')='The Arcade' then
+    execute 'system'
+  else
+    execute 'proc R'
+  end if
+stop
+include: Common\Audio.panda

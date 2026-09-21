@@ -1,0 +1,20 @@
+testId$='Bitipede'
+include: Tests\Start.panda
+testName$='Player stays inside the lower zone'
+gunY=24 : key$='W' : gosub GameInput : passed=(gunY==24) : gosub Assert
+testName$='Mushroom turns a segment downward'
+mat mushrooms=(0) : wormX(1)=10 : wormY(1)=5 : wormDir(1)=1 : mushrooms(5,11)=3 : wormClock=1
+gosub GameTick : passed=(wormY(1)==6 and wormDir(1)==-1) : gosub Assert
+testName$='Projectile damages a mushroom'
+bulletX=11 : bulletY=5.5 : dt=.02 : gosub GameTick
+passed=(mushrooms(5,11)==2 and bulletY==0) : gosub Assert
+testName$='Hit segment becomes a mushroom; surviving segments remain'
+mat mushrooms=(0) : wormX(1)=10 : wormY(1)=6 : bulletX=10 : bulletY=6.5 : wormClock=0
+gosub GameTick : passed=(wormOn(1)==0 and mushrooms(6,10)==3 and wormOn(2)==1) : gosub Assert
+testName$='Player collision costs a life with temporary protection'
+wormX(2)=gunX : wormY(2)=gunY : invul=0 : gosub GameTick
+passed=(lives==2 and invul>0) : gosub Assert
+testName$='Destroying the entire swarm advances the level'
+mat wormOn=(0) : gosub GameTick : passed=(level==2 and wormOn(1)==1 and wormCount==12) : gosub Assert
+include: Tests\Finish.panda
+include: Bitipede\Rules.panda

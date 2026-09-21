@@ -1,0 +1,7 @@
+dim testId$*30,testName$*100,key$*2,testKeys$*12
+dim pixels$(28,40)*2,ink(28,40),attr$(17)*20,notice$*80
+dim savePath$*260,saveText$*40
+open #20: 'name=S:\Tests\'&testId$&'-results.txt,replace',display,output
+score=0 : lives=3 : level=1 : gameTime=0 : dt=.05
+rnd(8675309)
+gosub GameInit

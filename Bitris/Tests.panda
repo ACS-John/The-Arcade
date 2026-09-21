@@ -1,0 +1,124 @@
+! Run via Tests.prc using the headless BR driver. Exercises the actual game rules.
+dim testName$*100
+dim seen(7)
+open #20: 'name=S:\Bitris\test-results.txt,replace',display,output
+gosub InitRules
+randomize
+gosub NewGame
+testName$='All rotations have four distinct cells and fit at spawn'
+for testKind=1 to 7
+  for testTurn=1 to 4
+    passed=fn_fits(testKind,testTurn,4,1) : gosub Assert
+    for aa=1 to 4
+      for bb=aa+1 to 4
+        passed=shapeX(testKind,testTurn,aa)<>shapeX(testKind,testTurn,bb) or shapeY(testKind,testTurn,aa)<>shapeY(testKind,testTurn,bb)
+        gosub Assert
+      next bb
+    next aa
+  next testTurn
+next testKind
+testName$='Seven-bag gives exactly one of each shape in every bag'
+bagPos=8
+for batch=1 to 100
+  mat seen=(0)
+  for nn=1 to 7
+    gosub TakeBag : seen(drawn)=seen(drawn)+1
+  next nn
+  for nn=1 to 7
+    passed=seen(nn)==1 : gosub Assert
+  next nn
+next batch
+testName$='Walls, floor, hidden ceiling and occupied cells reject collision'
+passed=(fn_fits(1,1,0,5)==0) : gosub Assert
+passed=(fn_fits(1,1,8,5)==0) : gosub Assert
+passed=(fn_fits(1,1,4,22)==0) : gosub Assert
+passed=(fn_fits(2,1,4,0)==0) : gosub Assert
+board(5,5)=7 : passed=(fn_fits(2,1,4,5)==0) : gosub Assert
+gosub NewGame
+testName$='Adjacent 1-4 line clears score and compact without losing blocks'
+for rowCount=1 to 4
+  mat board=(0) : score=0 : lineCount=0 : level=1
+  board(22-rowCount,3)=6
+  for rr=23-rowCount to 22
+    for cc=1 to 10
+      board(rr,cc)=2
+    next cc
+  next rr
+  gosub ClearLines
+  passed=cleared==rowCount and lineCount==rowCount and score==awards(rowCount) and board(22,3)==6
+  gosub Assert
+next rowCount
+testName$='Separated full rows compact the intervening blocks'
+mat board=(0)
+for cc=1 to 10
+  board(20,cc)=1 : board(22,cc)=1
+next cc
+board(21,5)=4 : board(19,8)=6
+gosub ClearLines
+passed=cleared==2 and board(22,5)==4 and board(21,8)==6 : gosub Assert
+testName$='Level changes after ten lineCount; clear uses the preceding level'
+mat board=(0) : score=0 : level=1 : lineCount=9
+for cc=1 to 10
+  board(22,cc)=1
+next cc
+gosub ClearLines
+passed=level==2 and lineCount==10 and score==100 : gosub Assert
+testName$='Ghost and hard drop land at floor and score traveled rows'
+gosub NewGame : piece=2 : py=3
+gosub FindGhost
+passed=ghostY==21 : gosub Assert
+gosub HardDrop
+passed=board(22,5)==2 and board(21,6)==2 and score==36 and py==1 : gosub Assert
+testName$='Hold is limited until the next locked piece'
+gosub NewGame : original=piece : expected=nextPiece
+gosub HoldPiece
+passed=held==original and piece==expected and holdUsed==1 : gosub Assert
+gosub HoldPiece
+passed=held==original and piece==expected : gosub Assert
+gosub HardDrop : expected=piece
+gosub HoldPiece
+passed=piece==original and held==expected and holdUsed==1 : gosub Assert
+testName$='Four rotations restore orientation'
+gosub NewGame : piece=3 : py=6 : direction=1
+for nn=1 to 4
+  gosub RotatePiece
+next nn
+passed=rotation==1 and px==4 and py==6 : gosub Assert
+testName$='I piece kicks off the left wall'
+piece=1 : rotation=2 : px=-1 : py=6
+gosub RotatePiece
+passed=rotation==3 and px==1 and fn_fits(piece,rotation,px,py) : gosub Assert
+testName$='O rotation is stable'
+piece=2 : rotation=1 : px=4 : py=21
+gosub RotatePiece
+passed=px==4 and py==21 and fn_fits(piece,rotation,px,py) : gosub Assert
+testName$='Blocked spawn ends the game'
+mat board=(0) : board(1,5)=1 : piece=2 : gameOver=0
+gosub SpawnPosition
+passed=gameOver==1 : gosub Assert
+testName$='New game clears prior loss, hold, score, lineCount and board'
+gosub NewGame
+passed=gameOver==0 and held==0 and holdUsed==0 and score==0 and lineCount==0 and board(1,5)==0 : gosub Assert
+testName$='Ground contact gets a delay before locking'
+piece=2 : py=21 : lockSince=0 : lastFall=timer
+gosub TickGame
+passed=lockSince>0 and board(22,5)==0 : gosub Assert
+lockSince=timer-1
+gosub TickGame
+passed=board(22,5)==2 and py==1 : gosub Assert
+testName$='Lock reset cap prevents indefinite grounded movement'
+gosub NewGame : piece=2 : py=21 : lockSince=timer-1 : lockResets=15 : dx=1
+gosub MoveSide : gosub TickGame
+passed=board(22,6)==2 : gosub Assert
+print #20: 'RESULT: '&str$(checks)&' checks, '&str$(failures)&' failures'
+close #20:
+execute 'system'
+stop
+Assert: !
+  checks=checks+1
+  if passed=0 then
+    failures=failures+1
+    print #20: 'FAIL: '&testName$
+  end if
+return
+include: Bitris\Engine.panda

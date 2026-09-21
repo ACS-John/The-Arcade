@@ -1,0 +1,193 @@
+! Bitris -- a native Business Rules falling-block game.
+! Standalone: Arcade/Bitris.cmd. ACS: Developer > The Arcade > Bitris.
+! Rules are shared with Tests.panda; no accounting library or data access.
+dim cellAttr$(8)*20,colors$(7)*7,field$*100,keys$*512,key$*2
+dim statusText$*26,savePath$*260,saveText$*40
+dim painted(22,10),frame(22,10)
+dim spriteRoot$*100,tilePath$*160,lastAudio$*22
+spriteRoot$='S:\art\sprites\'
+randomize
+gosub InitRules
+savePath$=env.temp&'\Bitris_best.txt'
+best=0 : gosub LoadBest
+execute 'config attribute [BT_BG]/#E7EEF9:#101827'
+execute 'config attribute [BT_DIM]/#8393AF:#101827'
+execute 'config attribute [BT_EDGE]/#37D8D0:#101827'
+execute 'config attribute [BT_EMPTY]/#24334D:#152035'
+execute 'config attribute [BT_GHOST]/#546B8B:#152035'
+colors$(1)='#39D7EE' : colors$(2)='#F4D35E' : colors$(3)='#B593FA'
+colors$(4)='#72DF9B' : colors$(5)='#FA7189' : colors$(6)='#658FFF' : colors$(7)='#F9AA60'
+for palette=1 to 7
+  cellAttr$(palette)='[BT_'&str$(palette)&']'
+  execute 'config attribute '&cellAttr$(palette)&'/#101827:'&colors$(palette)
+next palette
+cellAttr$(8)='[BT_GHOST]'
+open #0: 'srow=1,scol=1,rows=56,cols=96,N=[BT_BG],caption=Bitris,picture=S:\art\bitris-scene.png',display,outin
+open #1: 'srow=11,scol=28,rows=40,cols=40,border=s:[BT_EDGE],N=[BT_EMPTY],caption= THE STACK ',display,outin
+print #0,fields '10,5,C 20,[BT_DIM]': 'HOLD  /  C'
+print #0,fields '10,73,C 20,[BT_DIM]': 'NEXT'
+print #0,fields '21,73,C 20,[BT_DIM]': 'SCORE'
+print #0,fields '25,73,C 20,[BT_DIM]': 'BEST'
+print #0,fields '29,73,C 20,[BT_DIM]': 'LINES'
+print #0,fields '33,73,C 20,[BT_DIM]': 'LEVEL'
+print #0,fields '21,5,C 20,[BT_EDGE]': 'HOW TO PLAY'
+print #0,fields '23,5,C 21': 'Arrows / A D   Move'
+print #0,fields '25,5,C 21': 'Up / W / X    Rotate'
+print #0,fields '27,5,C 21': 'Z             Reverse'
+print #0,fields '29,5,C 21': 'Down / S      Lower'
+print #0,fields '31,5,C 21': 'Space         Drop'
+print #0,fields '33,5,C 21': 'C             Hold'
+print #0,fields '35,5,C 21': 'P             Pause'
+print #0,fields '37,5,C 21': 'Enter         Play'
+print #0,fields '39,5,C 21': 'Q / Esc       Quit'
+print #0,fields '43,73,C 20,[BT_DIM]': '7 SHAPES. ONE STACK.'
+print #0,fields '54,5,C 86,[BT_DIM]': '100 / 300 / 500 / 800 x level for 1 / 2 / 3 / 4 lines. Speed rises every 10 lines.'
+gosub NewGame
+started=0 : paused=0 : mat painted=(-1)
+gosub DrawGame
+if env$('ArcadeSmoke')='Yes' then execute 'system'
+gosub AudioStart
+
+MainLoop: ! KSTAT$ consumes queued BR scan codes; sleep yields CPU while idle.
+  soundLines=lineCount : soundOver=gameOver
+  keys$=kstat$
+  for keyIdx=1 to len(keys$)
+    key$=uprc$(keys$(keyIdx:keyIdx))
+    ! Function/window events are two-byte scan codes ending in zero.
+    if keyIdx<len(keys$) then
+      if keys$(keyIdx+1:keyIdx+1)=chr$(0) then
+        key$=keys$(keyIdx:keyIdx+1) : keyIdx=keyIdx+1
+      end if
+    end if
+    if key$='Q' or key$=chr$(27) or key$=hex$('6300') or key$=hex$('5D00') then goto QuitGame
+    if key$='M' then gosub AudioToggle
+    if key$=chr$(13) then
+      if started=0 or gameOver then
+        gosub NewGame : started=1 : paused=0 : fn_sfx('start')
+      end if
+    else if started and gameOver=0 then
+      if key$='P' then
+        paused=1-paused : lastFall=timer : fn_sfx('pause')
+        if lockSince>0 then lockSince=timer
+      else if paused=0 then
+        if key$='A' or key$=chr$(14) then dx=-1 : gosub MoveSide
+        if key$='D' or key$=chr$(12) then dx=1 : gosub MoveSide
+        if key$='W' or key$='X' or key$=chr$(11) then direction=1 : gosub RotatePiece : fn_sfx('rotate')
+        if key$='Z' then direction=-1 : gosub RotatePiece : fn_sfx('rotate')
+        if key$='S' or key$=chr$(10) then gosub SoftDrop
+        if key$=' ' then gosub HardDrop : fn_sfx('lock')
+        if key$='C' then gosub HoldPiece : fn_sfx('select')
+      end if
+    end if
+    if gameOver then goto KeysDone
+  next keyIdx
+KeysDone: !
+  if started and paused=0 then gosub TickGame
+  if score>best then best=score
+  if lineCount>soundLines then fn_sfx('clear')
+  if gameOver and soundOver=0 then fn_sfx('lose')
+  gosub AudioFlush
+  gosub DrawGame
+  sleep(.015)
+goto MainLoop
+
+DrawGame: ! Only changed board cells are painted, avoiding whole-screen flicker.
+  mat frame=board
+  if started and paused=0 and gameOver=0 then
+    gosub FindGhost
+    for drawBlock=1 to 4
+      drawX=px+shapeX(piece,rotation,drawBlock) : drawY=ghostY+shapeY(piece,rotation,drawBlock)
+      frame(drawY,drawX)=8
+    next drawBlock
+    for drawBlock=1 to 4
+      drawX=px+shapeX(piece,rotation,drawBlock) : drawY=py+shapeY(piece,rotation,drawBlock)
+      frame(drawY,drawX)=piece
+    next drawBlock
+  end if
+  for drawRow=3 to 22
+    for drawCol=1 to 10
+      ink=frame(drawRow,drawCol)
+      if paused then ink=0
+      if painted(drawRow,drawCol)<>ink then
+        field$=str$((drawRow-3)*2+1)&','&str$((drawCol-1)*4+1)&',P 2/4'
+        if ink=0 then
+          tilePath$=spriteRoot$&'floor.png'
+        else if ink=8 then
+          tilePath$=spriteRoot$&'ghost.png'
+        else
+          tilePath$=spriteRoot$&'block'&str$(ink)&'.png'
+        end if
+        print #1,fields field$: tilePath$
+        painted(drawRow,drawCol)=ink
+      end if
+    next drawCol
+  next drawRow
+  ! Refresh sidebar only when its values change.
+  if score<>shownScore or best<>shownBest or nextPiece<>shownNext or held<>shownHeld or shownLevel<>level or shownLines<>lineCount or hudReady=0 then
+    print #0,fields '22,73,N 12': score
+    print #0,fields '26,73,N 12': best
+    print #0,fields '30,73,N 12': lineCount
+    print #0,fields '34,73,N 12': level
+    previewKind=nextPiece : previewCol=73 : gosub DrawPreview
+    previewKind=held : previewCol=5 : gosub DrawPreview
+    shownScore=score : shownBest=best : shownNext=nextPiece : shownHeld=held
+    shownLevel=level : shownLines=lineCount : hudReady=1
+  end if
+  statusText$='KEEP IT LEVEL'
+  if started=0 then statusText$='ENTER TO PLAY'
+  if paused then statusText$='PAUSED - P TO RESUME'
+  if gameOver then statusText$='GAME OVER - ENTER TO RETRY'
+  if statusText$<>priorStatus$ then
+    print #0,fields '52,28,C 40,[BT_EDGE]': statusText$
+    priorStatus$=statusText$
+    if gameOver then gosub SaveBest
+  end if
+  gosub AudioLabel
+  if audioStatus$<>lastAudio$ then print #0,fields '45,73,C 22,[BT_EDGE]': audioStatus$ : lastAudio$=audioStatus$
+return
+dim priorStatus$*26
+
+DrawPreview: ! Four rows by four blocks, independent of the live board.
+  for previewRow=12 to 18 step 2
+    for previewCell=0 to 3
+      print #0,fields str$(previewRow)&','&str$(previewCol+previewCell*4)&',P 2/4': spriteRoot$&'empty.png'
+    next previewCell
+  next previewRow
+  if previewKind>0 then
+    for previewBlock=1 to 4
+      previewX=previewCol+shapeX(previewKind,1,previewBlock)*4
+      previewY=12+shapeY(previewKind,1,previewBlock)*2
+      print #0,fields str$(previewY)&','&str$(previewX)&',P 2/4': spriteRoot$&'block'&str$(previewKind)&'.png'
+    next previewBlock
+  end if
+return
+LoadBest: ! Optional local score; corrupt/missing files never prevent play.
+  open #12: 'name='&savePath$,display,input ioerr BestMissing
+  linput #12: saveText$ eof BestClose
+  best=max(0,val(saveText$)) conv BestClose
+BestClose: !
+  close #12:
+BestMissing: !
+return
+SaveBest: !
+  open #12: 'name='&savePath$&',replace',display,output ioerr BestNotSaved
+  print #12: str$(best) ioerr BestSaveClose
+BestSaveClose: !
+  close #12: ioerr BestNotSaved
+BestNotSaved: !
+return
+QuitGame: !
+  gosub AudioStop
+  gosub SaveBest
+  close #1:
+  if env$('ArcadeReturn')='Yes' then
+    setenv('ArcadeReturn','')
+    chain 'S:\Arcade.br'
+  else if env$('status.config.application_name')='Bitris' then
+    execute 'system'
+  else
+    execute 'proc R'
+  end if
+stop
+include: Bitris\Engine.panda
+include: Common\Audio.panda

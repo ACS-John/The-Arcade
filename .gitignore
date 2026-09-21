@@ -1,0 +1,21 @@
+# Local runtime, licensing, credentials and tool output.
+runtime/
+.build/
+node_modules/
+.env
+.env.*
+*.key
+*.lic
+brconfig.local.sys
+runtime.local.cmd
+*.brs
+*-compileError.txt
+*-results.txt
+Tests/*.br
+Tests/*.png
+Tests/run-*.prc
+Tests/diagnostic-*
+build-files.txt
+Bitris/Tests.br
+*.test.exe
+coverage.out

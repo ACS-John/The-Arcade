@@ -1,0 +1,27 @@
+testId$='Invaders'
+include: Tests\Start.panda
+testName$='Wave starts with 32 enemies and destructible shields'
+passed=(remaining==32 and shield(5)==3 and shield(10)==0) : gosub Assert
+testName$='Movement clamps to the arena'
+shipX=2 : key$='A' : gosub GameInput : passed=(shipX==2) : gosub Assert
+shipX=39 : key$='D' : gosub GameInput : passed=(shipX==39) : gosub Assert
+testName$='Player shot removes a traversed alien exactly once'
+mat shield=(0) : shotX=alienX : shotY=alienY+6.5 : dt=.05
+gosub GameTick
+passed=(aliens(4,1)==0 and remaining==31 and score==10 and shotY==0) : gosub Assert
+testName$='Shield absorbs a player shot'
+shield(5)=3 : shotX=5 : shotY=23.5 : gosub GameTick
+passed=(shield(5)==2 and shotY==0) : gosub Assert
+testName$='Bomb damages shields rather than the ship'
+bombX(1)=5 : bombY(1)=22.8 : gosub GameTick
+passed=(shield(5)==1 and bombY(1)==0 and lives==3) : gosub Assert
+testName$='Ship loses one life and gets invulnerability'
+bombX(1)=shipX : bombY(1)=25 : invul=0 : gosub GameTick
+passed=(lives==2 and invul>0) : gosub Assert
+testName$='Formation descends and reverses at the edge'
+alienX=10 : alienDir=1 : alienClock=2 : previousY=alienY : gosub GameTick
+passed=(alienY==previousY+1 and alienDir==-1) : gosub Assert
+testName$='Cleared formation advances to next wave'
+remaining=0 : gosub GameTick : passed=(remaining==32 and level==2) : gosub Assert
+include: Tests\Finish.panda
+include: BR Invaders\Rules.panda

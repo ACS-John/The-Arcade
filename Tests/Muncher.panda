@@ -1,0 +1,42 @@
+testId$='Muncher'
+include: Tests\Start.panda
+testName$='Tunnel wraps while outer walls reject movement'
+passed=(fn_pass(0,14)==1 and fn_pass(0,13)==0) : gosub Assert
+testName$='Walls stop movement'
+munchX=3 : munchY=2 : munchDir=3 : wantedDir=3 : moveClock=1
+gosub GameTick : passed=(munchY==2) : gosub Assert
+testName$='Eating a power pellet awards 50 and enables chase reversal'
+munchX=2 : munchY=2 : munchDir=1 : wantedDir=1 : moveClock=1 : score=0
+gosub GameTick : passed=(score==50 and powerUntil>gameTime and dots(2,2)==0) : gosub Assert
+testName$='Powered player eats a ghost'
+ghostX(1)=munchX : ghostRow(1)=munchY : previousScore=score : gosub MazeCollision
+passed=(score==previousScore+200 and ghostX(1)==20 and lives==3) : gosub Assert
+testName$='Unpowered collision costs a life'
+powerUntil=0 : gameTime=10 : safeUntil=0 : ghostX(1)=munchX : ghostRow(1)=munchY
+gosub MazeCollision : passed=(lives==2 and munchX==20 and munchY==26) : gosub Assert
+testName$='All walkable cells are reachable from the starting corridor'
+dim reached(27,39)
+mat reached=(0) : reached(26,20)=1
+for floodPass=1 to 80
+  for testRow=1 to 27
+    for testCol=1 to 39
+      if reached(testRow,testCol) then
+        for testDir=1 to 4
+          tx=testCol+mx(testDir) : ty=testRow+my(testDir)
+          if tx>=1 and tx<=39 and ty>=1 and ty<=27 then
+            if fn_pass(tx,ty) then reached(ty,tx)=1
+          end if
+        next testDir
+      end if
+    next testCol
+  next testRow
+next floodPass
+for testRow=1 to 27
+  for testCol=1 to 39
+    if maze(testRow,testCol)=0 then passed=(reached(testRow,testCol)==1) : gosub Assert
+  next testCol
+next testRow
+testName$='Clearing pellets advances the level'
+dotsLeft=0 : gosub GameTick : passed=(level==2 and dotsLeft>0) : gosub Assert
+include: Tests\Finish.panda
+include: Byte Muncher\Rules.panda

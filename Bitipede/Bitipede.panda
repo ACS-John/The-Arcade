@@ -1,0 +1,6 @@
+title$='BITIPEDE'
+gameId$='bitipede'
+tagline$='A segmented swarm, a mushroom maze, and nowhere to hide.'
+controls$='ARROWS / W A S D: move in the lower zone     SPACE: fire     P: pause     Q / ESC: return'
+include: Common\Start.panda
+include: Bitipede\Rules.panda

@@ -1,0 +1,94 @@
+dim laneOffset(10),laneSpeed(10),homes(5)
+GameInit: !
+  mat homes=(0)
+  gosub RoadWave
+return
+RoadWave: ! Five river lanes and five traffic lanes; alternate directions.
+  for lane=1 to 10
+    laneOffset(lane)=mod(lane*7,14)
+    laneSpeed(lane)=(1+mod(lane,3)*.4+.12*level)*(1-2*mod(lane,2))
+    if lane>5 then laneSpeed(lane)=laneSpeed(lane)*1.5
+  next lane
+  gosub FrogSpawn
+return
+FrogSpawn: !
+  frogX=20 : frogY=28 : furthest=28 : tripTime=45 : frogSafe=gameTime+.5
+  notice$='FIVE HOMES AT THE TOP / WATCH THE GAPS BETWEEN LOGS'
+return
+GameInput: !
+  if key$='A' or key$=chr$(14) then frogX=max(1,frogX-1)
+  if key$='D' or key$=chr$(12) then frogX=min(40,frogX+1)
+  if key$='W' or key$=chr$(11) then frogY=max(2,frogY-1)
+  if key$='S' or key$=chr$(10) then frogY=min(28,frogY+1)
+  if frogY<furthest then score=score+10 : furthest=frogY
+  gosub FrogHazards
+return
+def fn_laneCell(xx,ln;phase,width)
+  phase=mod(xx-laneOffset(ln)+280,14)
+  width=8
+  if ln>5 then width=3
+  fn_laneCell=(phase<width)
+fnend
+GameTick: !
+  tripTime=tripTime-dt
+  if frogY>=3 and frogY<=11 then
+    lane=int((frogY-3)/2)+1
+    frogX=frogX+laneSpeed(lane)*dt
+  end if
+  for lane=1 to 10
+    laneOffset(lane)=mod(laneOffset(lane)+laneSpeed(lane)*dt+140,14)
+  next lane
+  gosub FrogHazards
+  notice$='TIME LEFT: '&str$(max(0,int(tripTime)))&'  /  FIVE HOMES TO ADVANCE'
+return
+FrogHazards: ! No rounding in log/car collision: use the same lane function as drawing.
+  hit=0
+  if tripTime<=0 or frogX<1 or frogX>40 then hit=1
+  if frogY>=3 and frogY<=11 then
+    lane=int((frogY-3)/2)+1
+    if fn_laneCell(frogX,lane)=0 then hit=1
+  end if
+  if frogY>=16 and frogY<=25 and gameTime>=frogSafe then
+    lane=6+int((frogY-16)/2)
+    if fn_laneCell(frogX,lane) then hit=1
+  end if
+  if frogY=2 then
+    homeSlot=1+int((frogX-1)/8)
+    if homeSlot>=1 and homeSlot<=5 then
+      if abs(frogX-(homeSlot*8-4))<=2 and homes(homeSlot)=0 then
+        homes(homeSlot)=1 : score=score+100+int(tripTime)*2
+        fn_sfx('power')
+        homeCount=0
+        for homeIdx=1 to 5
+          homeCount=homeCount+homes(homeIdx)
+        next homeIdx
+        if homeCount=5 then level=level+1 : score=score+500 : mat homes=(0) : gosub RoadWave
+        gosub FrogSpawn
+      else
+        hit=1
+      end if
+    else
+      hit=1
+    end if
+  end if
+  if hit then lives=lives-1 : gosub FrogSpawn
+return
+GameRender: !
+  for fy=1 to 28
+    for fx=1 to 40
+      if fy>=3 and fy<=11 then
+        lane=int((fy-3)/2)+1
+        if fn_laneCell(fx,lane) then fn_dot(fx,fy,'==',12) else fn_dot(fx,fy,'~ ',10)
+      else if fy>=16 and fy<=25 then
+        lane=6+int((fy-16)/2)
+        if fn_laneCell(fx,lane) then fn_dot(fx,fy,'[]',3+mod(lane,5)) else fn_dot(fx,fy,' .',11)
+      else if fy=13 or fy=27 then
+        fn_dot(fx,fy,'..',6)
+      end if
+    next fx
+  next fy
+  for homeIdx=1 to 5
+    if homes(homeIdx) then fn_dot(homeIdx*8-4,2,'@@',6) else fn_dot(homeIdx*8-4,2,'[]',5)
+  next homeIdx
+  fn_dot(frogX,frogY,'><',6)
+return

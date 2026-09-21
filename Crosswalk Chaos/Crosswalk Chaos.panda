@@ -1,0 +1,6 @@
+title$='CROSSWALK CHAOS'
+gameId$='crosswalk'
+tagline$='Dodge the rush hour. Ride the river. Fill all five homes.'
+controls$='ARROWS or W A S D: hop     Ride the brown logs; avoid cars and water     P: pause     Q: return'
+include: Common\Start.panda
+include: Crosswalk Chaos\Rules.panda

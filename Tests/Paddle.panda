@@ -1,0 +1,34 @@
+testId$='Paddle'
+include: Tests\Start.panda
+testName$='New game waits for a serve and builds 60 bricks'
+passed=(serving==1 and bricksLeft==60) : gosub Assert
+key$=' ' : gosub GameInput
+testName$='Space launches a ball upward'
+passed=(serving==0 and ballOn(1)==1 and ballVY(1)<0) : gosub Assert
+testName$='Side-wall collision reflects horizontal velocity'
+bn=1 : ballX(1)=1.05 : ballY(1)=20 : ballVX(1)=-10 : ballVY(1)=0 : stepTime=.02
+gosub StepBall : passed=(ballX(1)==1 and ballVX(1)>0) : gosub Assert
+testName$='Brick collision scores once and reflects'
+ballX(1)=2 : ballY(1)=2.4 : ballVX(1)=0 : ballVY(1)=10
+gosub StepBall
+passed=(bricks(1,1)==0 and bricksLeft==59 and score==60 and ballVY(1)<0) : gosub Assert
+testName$='Gaps between bricks remain passable'
+ballX(1)=4 : ballY(1)=3 : ballVX(1)=0 : ballVY(1)=1 : previousBricks=bricksLeft
+gosub StepBall : passed=(bricksLeft==previousBricks and ballVY(1)>0) : gosub Assert
+testName$='Paddle returns a descending ball'
+paddleHalf=3 : ballX(1)=paddleX : ballY(1)=25.9 : ballVY(1)=10
+gosub StepBall : passed=(ballVY(1)<0 and ballY(1)<26) : gosub Assert
+testName$='Missing the paddle costs exactly one life'
+ballX(1)=1 : ballY(1)=28.1 : ballVY(1)=10 : gosub GameTick
+passed=(lives==2 and serving==1) : gosub Assert
+testName$='Wide capsule expands the paddle temporarily'
+capsuleType=1 : capsuleX=paddleX : capsuleY=25 : gosub GameTick
+passed=(wideUntil>gameTime and capsuleY==0) : gosub Assert
+testName$='Multiball capsule starts three balls'
+capsuleType=2 : capsuleX=paddleX : capsuleY=25 : gosub GameTick
+passed=(ballOn(1)+ballOn(2)+ballOn(3)==3 and serving==0) : gosub Assert
+testName$='Cleared wall advances and waits for a new serve'
+bricksLeft=0 : gosub GameTick
+passed=(level==2 and bricksLeft==60 and serving==1) : gosub Assert
+include: Tests\Finish.panda
+include: Paddle Panic\Rules.panda

@@ -1,0 +1,774 @@
+! Aphelion
+! A text adventure: waking with no memory on an alien world.
+! Plain BR only -- no LIBRARY statements, no Core/FileIO/ScreenIO dependency.
+! Reachable from Help > Aphelion. Screen is #0 (the header banner and the
+! wallpaper background) plus four bordered child windows: #4 the picture
+! (centered, spanning the full content width), #1 the status window
+! (captioned with the astronaut's name, 'Astronaut' until the story ever
+! learns otherwise -- tightened to the width its CHECK-box fragment list
+! actually needs, sitting to the right of the story frame), #2 the
+! story-text window (captioned with the current location), and #3 ("Action")
+! the choice/command window, sitting in the gap between the picture and the
+! story/Astronaut frames, sized to fit exactly: its bottom edge fixed, but
+! its row count always equals the number of options (growing upward) and
+! its width equals the longest option's text plus a couple of columns. On
+! exit it closes #1-#4, then checks
+! Env$('status.config.application_name'): 'Aphelion' (launched standalone via
+! aphelion.sys/Aphelion.cmd) means EXECUTE 'system' to close outright; any
+! other name (i.e. 'ACS 5', reached from inside ACS 5's own Help menu) means
+! EXECUTE 'Proc R' so the console/screen state resets before returning to
+! that app's menu instead.
+! Story choices are real Print-Fields buttons in window #3 (one per option,
+! each its own fkey): Tab or a click picks one. There's no in-list quit
+! option -- clicking the window's own close (X) button fires FKEY 93,
+! trapped straight to QuitGame; Escape (FKEY 99) is trapped the same way.
+! (Note: this app remaps Escape at the keyboard-config level -- Core\
+! Start.panda -- so Esc isn't guaranteed to reach BR as FKEY 99 in every
+! context; the X button is the one path proven reliable everywhere.)
+! Color scheme (CONFIG ATTRIBUTE, the same mechanism Core\Programs\Theme.
+! panda uses) matches the art direction's jewel-toned palette: ivory text
+! on midnight violet, a mint+sunken/3D selection highlight (button-styled --
+! there's no BR-native [button] attribute; Theme.panda's own [buttons]/
+! [buttoncancel] subattributes exist but carry the app's global green/red
+! theme, so this defines its own instead), and a coral border/accent.
+! Each node's story text is narrated aloud via Aphelion\Speak
+! (a small Go tool, same house convention as Core\Programs\DirGo and
+! GoSortFiles) which reads the Windows OneCore speech engine through
+! PowerShell. AskChoice
+! triggers it once storyText$ is complete for that node, through SYSTEM -C
+! so BR never waits on it -- a missing Speak.exe, or any failure in it, is
+! silently ignored, since narration is a bonus, never something that should
+! be able to break the game. Set narrationEnabled=0 below to turn it off by
+! default, or leave it on and let the player flip the real Narration
+! checkbox DrawChrome posts in the story frame's own top row (#2, fkey 1500,
+! NOWAIT so it never blocks) at any time -- see NarrationToggled.
+! Run it on its own: load 'S:\Aphelion\Aphelion' : run
+
+dim frag(7)
+dim fragName$(7)*70
+dim hudO2$*4, hudBpm$*4, hudClock$*14
+dim locationName$*40
+dim sheetCaption$*40
+dim artPath$*100
+dim bannerPath$*100
+dim wallpaperPath$*100
+dim wallpaperOpt$*120
+dim picOpt$*150
+dim lineText$*120
+dim storyText$*4000
+dim sheetLine$*70
+dim choiceLabel$*100
+dim choiceText$(6)*100
+dim ttsExe$*200
+dim ttsTextFile$*200
+dim ttsCmdFile$*200
+dim saveFile$*200
+dim saveLine$*10
+dim narrationCheck$*20
+
+fragName$(1)="a face you don't recognize"
+fragName$(2)='the shape of the horizon'
+fragName$(3)='something that answered you'
+fragName$(4)='a voice already yours'
+fragName$(5)='a gesture repeated back'
+fragName$(6)='what the grove keeps'
+fragName$(7)='something that remembers walking beside you'
+
+! Progress (which memory fragments have ever been recovered) survives
+! between sessions via a small save file in %temp% -- see LoadProgress/
+! SaveProgress below. Everything else about the story always restarts
+! fresh from Start; only the fragment checklist carries over.
+saveFile$=env.temp&'\Aphelion_save.txt'
+gosub LoadProgress
+
+randomize
+execute 'config attribute [APH_BG]/#F0ECE2:#150C28' error ignore
+execute 'config attribute [APH_SEL]S/#150C28:#6BE0B8' error ignore
+execute 'config attribute [APH_BORDER]/#F2836B:#150C28' error ignore
+sheetCaption$='Astronaut' ! Renamed here if the story ever reveals a real name.
+locationName$='Unknown'
+bannerPath$='S:\Aphelion\art\title-banner-slim.png'
+wallpaperPath$='S:\Aphelion\art\wallpaper.png'
+wallpaperOpt$=''
+if exists(wallpaperPath$) then wallpaperOpt$=',picture='&wallpaperPath$
+narrationEnabled=1
+! OS_FILENAME$ converts the BR-virtual S: drive to a real OS path -- required
+! here (unlike the art paths above) because ttsExe$ is written into a .cmd
+! file that a real OS shell executes outside BR, where S:\ does not exist.
+ttsExe$=os_filename$('S:\Aphelion\Speak\Speak-'&env$('server_platform.os_bits')&'bit\Speak.exe')
+ttsTextFile$=env.temp&'\Aphelion_speak.txt'
+ttsCmdFile$=env.temp&'\Aphelion_speak.cmd'
+open #0: 'srow=1,scol=1,rows=55,cols=150,N=[APH_BG]'&wallpaperOpt$, display, outin
+! #1 status (right of the story frame, tightened to its CHECK-box content).
+! Its top band (rows 32-34, overlaid by #5/#6/#7 below) is left blank by
+! #1 itself -- the fragment header/checklist below it is what needs #1's
+! own interior height.
+open #1: 'srow=36,scol=92,erow=49,ecol=141,border=s:[APH_BORDER],N=[APH_BG],caption='&sheetCaption$, display, outin
+! #5/#6/#7: O2, BPM, and Clock each get their own small frame, sitting side
+! by side across #1's top band instead of being plain text lines in #1.
+open #5: 'srow=37,scol=93,erow=37,ecol=107,border=s:[APH_BORDER],N=[APH_BG],caption=O2', display, outin
+open #6: 'srow=37,scol=109,erow=37,ecol=123,border=s:[APH_BORDER],N=[APH_BG],caption=BPM', display, outin
+open #7: 'srow=37,scol=125,erow=37,ecol=139,border=s:[APH_BORDER],N=[APH_BG],caption=Clock', display, outin
+! #2 story (left) -- same height as #1
+open #2: 'srow=36,scol=10,erow=49,ecol=71,border=s:[APH_BORDER],N=[APH_BG],FONT.TEXT=Verdana:swiss:bold:large,caption='&locationName$, display, outin
+! #3 choices -- fixed top-left corner only; AskChoice closes/reopens this
+! each time sized exactly to its current option list (see AskChoice).
+open #3: 'srow=31,scol=10,erow=32,ecol=20,border=s:[APH_BORDER],N=[APH_BG],caption=Action', display, outin
+! #4 picture -- centered, about 30% narrower than the full content width
+open #4: 'srow=11,scol=30,erow=25,ecol=121,border=s:[APH_BORDER],N=[APH_BG]', display, outin
+gosub AudioStart
+goto TitleScreen
+
+! ***************** Title *****************
+TitleScreen: !
+	locationName$='Unknown'
+	artPath$='S:\Aphelion\art\title.jpg'
+	gosub DrawChrome
+	lineText$='APHELION, n. -- the point in an orbit farthest from the star it' : gosub Line
+	lineText$='orbits.' : gosub Line
+	gosub Blank
+	lineText$='Cold ground. A double shadow. No name that answers when you reach' : gosub Line
+	lineText$='for one. You wake with a working suit, a dying signal, and a sky' : gosub Line
+	lineText$='that belongs to somewhere else.' : gosub Line
+	gosub Blank
+	choiceLabel$='Wake up' : gosub AddChoice
+	gosub AskChoice
+	goto Start
+
+! ***************** Opening *****************
+Start: !
+	hudO2$='98' : hudBpm$='132' : hudClock$='T+00:00:04'
+	locationName$='Crash site'
+	artPath$='S:\Aphelion\art\crashsite.jpg'
+	gosub DrawChrome
+	lineText$='Cold ground against your cheek. The first thing you know is that' : gosub Line
+	lineText$="you don't know anything -- not your name, not how you got here," : gosub Line
+	lineText$='not why the sky is the wrong color. Two moons hang low and close' : gosub Line
+	lineText$='together, throwing a double shadow across cracked white soil.' : gosub Line
+	gosub Blank
+	lineText$='Something on your wrist is blinking amber light against your skin,' : gosub Line
+	lineText$='insistent, patient, like it has been waiting for you to wake up' : gosub Line
+	lineText$='for a long time.' : gosub Line
+	gosub Blank
+	choiceLabel$='Examine your body and suit' : gosub AddChoice
+	choiceLabel$='Scan the horizon' : gosub AddChoice
+	choiceLabel$='Call out' : gosub AddChoice
+	gosub AskChoice
+	on choice goto ExamineBody, ScanHorizon, CallOut none InternalMenuError
+
+ExamineBody: !
+	hudO2$='97' : hudBpm$='126' : hudClock$='T+00:03:40'
+	locationName$='Crash site'
+	artPath$='S:\Aphelion\art\crashsite.jpg'
+	gosub DrawChrome
+	lineText$='Your suit is intact but scored with long scratches, like something' : gosub Line
+	lineText$='dragged you here -- or you dragged yourself. Stitched into the' : gosub Line
+	lineText$='collar, a serial you almost recognize: UNIT 7 -- COLONY RELAY.' : gosub Line
+	gosub Blank
+	lineText$='Your gloved hand finds a shape in a thigh pocket: a photograph,' : gosub Line
+	lineText$="warped and sun-bleached, of a face you should know. You don't." : gosub Line
+	fragIdx=1 : gosub CollectFrag
+	goto WakeHub
+
+ScanHorizon: !
+	hudO2$='97' : hudBpm$='118' : hudClock$='T+00:02:55'
+	locationName$='Crash site'
+	artPath$='S:\Aphelion\art\crashsite.jpg'
+	gosub DrawChrome
+	lineText$="Your suit's visor flickers awake, painting the world in false" : gosub Line
+	lineText$='color. Two kilometers east, something tall and broken catches the' : gosub Line
+	lineText$='double moonlight -- a tower, maybe, or an antenna.' : gosub Line
+	gosub Blank
+	lineText$='West, the ground folds down into a forest that glows faintly from' : gosub Line
+	lineText$='within, veins of cold green light pulsing under a black canopy' : gosub Line
+	lineText$='like something breathing.' : gosub Line
+	fragIdx=2 : gosub CollectFrag
+	goto WakeHub
+
+CallOut: !
+	hudO2$='97' : hudBpm$='141' : hudClock$='T+00:01:20'
+	locationName$='Crash site'
+	artPath$='S:\Aphelion\art\crashsite.jpg'
+	gosub DrawChrome
+	lineText$="Your voice comes out as a stranger's rasp. It doesn't feel like it" : gosub Line
+	lineText$='belongs to you yet. The word dies against the double moons -- and' : gosub Line
+	lineText$='then, impossibly, something answers.' : gosub Line
+	gosub Blank
+	lineText$='Not an echo. A chitter, low and curious, rising from the treeline' : gosub Line
+	lineText$='to the west. Whatever it is, it heard you. It is listening for' : gosub Line
+	lineText$='more.' : gosub Line
+	fragIdx=3 : gosub CollectFrag
+	goto WakeHub
+
+! ***************** Hub *****************
+WakeHub: !
+	hudO2$='96' : hudBpm$='110' : hudClock$='T+00:08:12'
+	locationName$='Crash site'
+	artPath$='S:\Aphelion\art\wakehub.jpg'
+	gosub DrawChrome
+	lineText$='A voice crackles to life inside your helmet, half static, half' : gosub Line
+	lineText$='something that might once have been human. It calls itself ECHO,' : gosub Line
+	lineText$='stammering the letters into place like it is assembling them for' : gosub Line
+	lineText$='the first time.' : gosub Line
+	gosub Blank
+	lineText$="It doesn't know your name either -- only that your air is finite," : gosub Line
+	lineText$='the local sun is close to setting behind two moons instead of one,' : gosub Line
+	lineText$='and that whatever brought you here left two things standing: a' : gosub Line
+	lineText$='signal tower to the east, and a forest that glows to the west.' : gosub Line
+	gosub Blank
+	choiceLabel$='Head for the tower' : gosub AddChoice
+	choiceLabel$='Follow the glow into the forest' : gosub AddChoice
+	choiceLabel$='Stay put and wait' : gosub AddChoice
+	gosub AskChoice
+	on choice goto Tower1, Forest1, StayPut none InternalMenuError
+
+StayPut: !
+	hudO2$='93' : hudBpm$='90' : hudClock$='T+04:40:00'
+	locationName$='Crash site'
+	artPath$='S:\Aphelion\art\ending-dusk.jpg'
+	gosub DrawChrome
+	lineText$='ENDING: SWALLOWED BY DUSK' : gosub Line
+	lineText$='you waited for an answer that was never coming to you' : gosub Line
+	gosub Blank
+	lineText$='You decide the smartest move is no move at all. Sit, breathe, wait' : gosub Line
+	lineText$='for whatever put you here to come back and explain itself. ECHO' : gosub Line
+	lineText$='logs your vitals in silence as the twin moons climb, and the' : gosub Line
+	lineText$='double shadows shorten, then vanish, then reverse.' : gosub Line
+	gosub Blank
+	lineText$='The temperature drops in a way your suit was not built for.' : gosub Line
+	lineText$='Something is moving in the dark now, drawn by warmth. You never' : gosub Line
+	lineText$="get a good look at it. ECHO's last transmission is a single word," : gosub Line
+	lineText$="and it isn't yours to hear again." : gosub Line
+	goto EndCommon
+
+! ***************** Tower branch *****************
+Tower1: !
+	hudO2$='88' : hudBpm$='104' : hudClock$='T+01:42:00'
+	locationName$='Signal tower'
+	artPath$='S:\Aphelion\art\tower.jpg'
+	gosub DrawChrome
+	lineText$='You walk east into a wind that smells of ozone and rust. Ninety' : gosub Line
+	lineText$='minutes in, the ground gives way to a debris field -- scorched' : gosub Line
+	lineText$='hull plating, three more suits like yours, empty, arranged too' : gosub Line
+	lineText$='neatly to be an accident.' : gosub Line
+	gosub Blank
+	lineText$="ECHO's voice tightens. Bio-signs: zero. It recommends a decision." : gosub Line
+	gosub Blank
+	choiceLabel$='Search the wreck' : gosub AddChoice
+	choiceLabel$='Keep moving before dark' : gosub AddChoice
+	gosub AskChoice
+	on choice goto TowerSearch, TowerPress none InternalMenuError
+
+TowerSearch: !
+	hudO2$='74' : hudBpm$='128' : hudClock$='T+02:10:00'
+	locationName$='Signal tower'
+	artPath$='S:\Aphelion\art\tower.jpg'
+	gosub DrawChrome
+	lineText$='You dig through brittle plating until your glove closes on a' : gosub Line
+	lineText$='data-slate, its casing cracked but its screen alive. It plays' : gosub Line
+	lineText$='four seconds of audio on loop: a voice -- yours -- saying a name' : gosub Line
+	lineText$="that isn't in the wreck's manifest." : gosub Line
+	gosub Blank
+	lineText$="ECHO's amber warning light blinks harder. The search cost you air" : gosub Line
+	lineText$="you didn't have to spend." : gosub Line
+	fragIdx=4 : gosub CollectFrag
+	goto Tower2
+
+TowerPress: !
+	hudO2$='85' : hudBpm$='112' : hudClock$='T+02:05:00'
+	locationName$='Signal tower'
+	artPath$='S:\Aphelion\art\tower.jpg'
+	gosub DrawChrome
+	lineText$='You leave the suits where they lie and keep walking, ECHO' : gosub Line
+	lineText$='tallying your dwindling air in a voice that tries and fails to' : gosub Line
+	lineText$='sound reassuring.' : gosub Line
+	gosub Blank
+	lineText$='Whatever the wreck knew, it keeps.' : gosub Line
+	goto Tower2
+
+Tower2: !
+	hudO2$='70' : hudBpm$='100' : hudClock$='T+03:00:00'
+	locationName$='Signal tower'
+	artPath$='S:\Aphelion\art\tower.jpg'
+	gosub DrawChrome
+	lineText$='The tower rises out of a dead pull, corroded but standing, wired' : gosub Line
+	lineText$='to some system still stubbornly running. A dish crowns it,' : gosub Line
+	lineText$='sweeping to a rhythm -- and you realize with a lurch that it' : gosub Line
+	lineText$='is not broadcasting an empty carrier signal. It is playing' : gosub Line
+	lineText$='something back, on loop.' : gosub Line
+	gosub Blank
+	lineText$='ECHO can tell you what, if you ask it to decode -- or you can' : gosub Line
+	lineText$='climb the last rungs yourself and override the loop to send a' : gosub Line
+	lineText$='signal of your own.' : gosub Line
+	gosub Blank
+	choiceLabel$='Ask ECHO to decode the loop' : gosub AddChoice
+	choiceLabel$='Climb and override it yourself' : gosub AddChoice
+	gosub AskChoice
+	on choice goto TowerDecode, TowerClimb none InternalMenuError
+
+TowerDecode: !
+	hudO2$='66' : hudBpm$='98' : hudClock$='T+03:14:00'
+	locationName$='Signal tower'
+	artPath$='S:\Aphelion\art\ending-loop.jpg'
+	gosub DrawChrome
+	lineText$='ENDING: THE LOOP' : gosub Line
+	lineText$='you have done all of this before, and forgotten every time' : gosub Line
+	gosub Blank
+	lineText$='ECHO decodes it in eleven seconds and goes very quiet before it' : gosub Line
+	lineText$='speaks. The tower has been repeating a distress call for what' : gosub Line
+	lineText$='its corroded timestamp claims is one thousand, four hundred and' : gosub Line
+	lineText$='some cycles.' : gosub Line
+	gosub Blank
+	lineText$='The voice on the recording is yours. Not similar -- yours,' : gosub Line
+	lineText$='mid-sentence, mid-panic, calling for a rescue that already came' : gosub Line
+	lineText$='and went and came again, because you have done all of this' : gosub Line
+	lineText$='before, more than once, and forgotten every time.' : gosub Line
+	gosub Blank
+	lineText$='ECHO asks, gently, if you would like to hear the rest of it. You' : gosub Line
+	lineText$="have all the time you don't remember having." : gosub Line
+	goto EndCommon
+
+TowerClimb: !
+	hudO2$='63' : hudBpm$='132' : hudClock$='T+03:20:00'
+	locationName$='Signal tower'
+	artPath$='S:\Aphelion\art\ending-signal.jpg'
+	gosub DrawChrome
+	lineText$='ENDING: THE SIGNAL ANSWERED' : gosub Line
+	lineText$='whatever comes next, you are not alone in this anymore' : gosub Line
+	gosub Blank
+	lineText$='You climb past frozen relays and dead indicator lights, find the' : gosub Line
+	lineText$='manual override with hands that somehow already know its shape,' : gosub Line
+	lineText$='and force the dish still. For the first time since you woke, the' : gosub Line
+	lineText$='loop breaks.' : gosub Line
+	gosub Blank
+	lineText$='You send everything ECHO has logged -- your vitals, your' : gosub Line
+	lineText$='coordinates, the double moons, all of it -- out past the' : gosub Line
+	lineText$='atmosphere in one clean pulse. Nothing answers for a long moment.' : gosub Line
+	gosub Blank
+	lineText$='Then, faint under the static, something does: three tones, evenly' : gosub Line
+	lineText$="spaced, in a pattern that isn't ECHO's and isn't yours. Someone," : gosub Line
+	lineText$='or something, is listening now.' : gosub Line
+	goto EndCommon
+
+! ***************** Forest branch *****************
+Forest1: !
+	hudO2$='89' : hudBpm$='108' : hudClock$='T+01:20:00'
+	locationName$='The forest'
+	artPath$='S:\Aphelion\art\forest.jpg'
+	gosub DrawChrome
+	lineText$='You walk west toward the glow. The forest closes overhead in a' : gosub Line
+	lineText$='black canopy laced with veins of cold light, and the ground' : gosub Line
+	lineText$='itself seems to pulse faintly underfoot, like something' : gosub Line
+	lineText$='enormous, breathing slow.' : gosub Line
+	gosub Blank
+	lineText$='ECHO logs the air here as breathable, barely, and unlike anything' : gosub Line
+	lineText$='in its database. The glowing trail forks: one branch curves' : gosub Line
+	lineText$='toward a clearing pulsing brighter than the rest; the other' : gosub Line
+	lineText$='follows a set of tracks, small and many-toed, heading deeper in.' : gosub Line
+	gosub Blank
+	choiceLabel$='Follow the tracks' : gosub AddChoice
+	choiceLabel$='Go toward the brighter clearing' : gosub AddChoice
+	gosub AskChoice
+	on choice goto ForestTracks, ForestGrove none InternalMenuError
+
+ForestTracks: !
+	hudO2$='82' : hudBpm$='100' : hudClock$='T+01:55:00'
+	locationName$='The forest'
+	artPath$='S:\Aphelion\art\forest.jpg'
+	gosub DrawChrome
+	lineText$='You follow the tracks until the underbrush thins and something' : gosub Line
+	lineText$='steps out to meet you: waist-high, low and quadrupedal, its hide' : gosub Line
+	lineText$="patterned in the same cold green as the canopy. It doesn't flee." : gosub Line
+	gosub Blank
+	lineText$='It tilts its head at the blinking amber light on your wrist, then' : gosub Line
+	lineText$='tilts its own head-crest to match, blink for blink, as though' : gosub Line
+	lineText$='trying the gesture on. ECHO has no data for this. You do; some' : gosub Line
+	lineText$='instinct older than your memory says this thing means you no' : gosub Line
+	lineText$='harm.' : gosub Line
+	fragIdx=5 : gosub CollectFrag
+	goto Forest2
+
+ForestGrove: !
+	hudO2$='81' : hudBpm$='114' : hudClock$='T+01:58:00'
+	locationName$='The forest'
+	artPath$='S:\Aphelion\art\forest.jpg'
+	gosub DrawChrome
+	lineText$="The clearing is brighter because it isn't empty. Suits -- dozens" : gosub Line
+	lineText$='of them, some human-shaped, some not -- stand rooted where they' : gosub Line
+	lineText$='fell, threaded through with the same glowing veins that light' : gosub Line
+	lineText$='the canopy, grown into the ground like they were always meant to' : gosub Line
+	lineText$='become part of it.' : gosub Line
+	gosub Blank
+	lineText$='Your own scratches, the ones that dragged you here, suddenly' : gosub Line
+	lineText$='make a different kind of sense. ECHO says nothing for a long' : gosub Line
+	lineText$='time.' : gosub Line
+	fragIdx=6 : gosub CollectFrag
+	goto Forest2
+
+Forest2: !
+	hudO2$='76' : hudBpm$='104' : hudClock$='T+02:40:00'
+	locationName$='The forest'
+	artPath$='S:\Aphelion\art\forest.jpg'
+	gosub DrawChrome
+	lineText$="It leads you deeper, past root-systems thick as ships' hulls," : gosub Line
+	lineText$="until the glow parts around a hollow at the forest's heart." : gosub Line
+	lineText$='Something is buried there that your suit recognizes even if you' : gosub Line
+	lineText$="don't: a pod, cracked open long ago, your name stencilled on its" : gosub Line
+	lineText$="hull in a hand you don't remember writing." : gosub Line
+	gosub Blank
+	if frag(3) then
+		lineText$='You think of the chitter that answered you at the crash' : gosub Line
+		lineText$='site, and wonder, not for the first time, whether it is' : gosub Line
+		lineText$='still following you.' : gosub Line
+		gosub Blank
+	end if
+	lineText$='ECHO says the obvious thing. You get to decide what it means --' : gosub Line
+	lineText$='to stay, or to keep looking for a way to leave.' : gosub Line
+	gosub Blank
+	choiceLabel$='Stay' : gosub AddChoice
+	choiceLabel$='Take what you can and keep moving' : gosub AddChoice
+	gosub AskChoice
+	on choice goto ForestStay, ForestLeave none InternalMenuError
+
+ForestStay: !
+	hudO2$='71' : hudBpm$='74' : hudClock$='T+03:05:00'
+	locationName$='The forest'
+	artPath$='S:\Aphelion\art\ending-roots.jpg'
+	gosub DrawChrome
+	lineText$='ENDING: ROOTS' : gosub Line
+	lineText$='a name is kept if enough people say it, and so are you' : gosub Line
+	gosub Blank
+	lineText$='You kneel at the hollow and the ground is warm in a way rock' : gosub Line
+	lineText$="shouldn't be. Whatever grew the suits into the grove wasn't" : gosub Line
+	lineText$='unmaking anyone; it was keeping them, the way a name is kept if' : gosub Line
+	lineText$='enough people say it.' : gosub Line
+	gosub Blank
+	lineText$='You stop needing to know who you were, the way you needed to an' : gosub Line
+	lineText$='hour ago. ECHO logs your bio-signs one last time, then, gently,' : gosub Line
+	lineText$='stops logging. The glow rises to meet you like it has been' : gosub Line
+	lineText$='waiting exactly this long.' : gosub Line
+	goto EndCommon
+
+ForestLeave: !
+	hudO2$='69' : hudBpm$='118' : hudClock$='T+03:10:00'
+	locationName$='The forest'
+	artPath$='S:\Aphelion\art\ending-ship.jpg'
+	gosub DrawChrome
+	lineText$='ENDING: THE SHIP REMEMBERS' : gosub Line
+	lineText$="you don't have your name back, but you have a direction" : gosub Line
+	gosub Blank
+	lineText$='You pull free of the hollow before its warmth can talk you out' : gosub Line
+	lineText$="of anything, and you drag the cracked pod's flight recorder out" : gosub Line
+	lineText$="with you. It won't tell you who you were." : gosub Line
+	gosub Blank
+	lineText$='It will tell you where the nearest working relay is, and that,' : gosub Line
+	lineText$="ECHO says, is enough to start with. You don't have your name" : gosub Line
+	lineText$='back. You have a direction, and for the first time since you' : gosub Line
+	lineText$='woke under two moons, that feels like the same thing.' : gosub Line
+	goto EndCommon
+
+! ***************** Ending menu / replay *****************
+! Continues straight on in the same story panel (no DrawChrome/NEWPAGE --
+! the ending art and prose printed just above should stay on screen).
+EndCommon: !
+	gosub Blank
+	fragCount=0
+	for fragIdx=1 to 7
+		if frag(fragIdx) then fragCount+=1
+	next fragIdx
+	lineText$='Fragments recovered this run: '&str$(fragCount)&' of 7' : gosub Line
+	gosub Blank
+	choiceLabel$='Wake up again' : gosub AddChoice
+	choiceLabel$='Exit' : gosub AddChoice
+	gosub AskChoice
+	if choice=1 then goto Start
+	goto QuitGame
+
+! ***************** Helper subroutines *****************
+
+! Clears window #0's title/picture, redraws the #1 status window (caption,
+! vitals, and a real disabled-look CHECK box per memory fragment -- plain
+! PRINT FIELDS never accepts input, so these can't be toggled by the user),
+! and clears window #2's story text back to its top row. Also clears the
+! pending choice list (built up next via AddChoice) and its window #3.
+DrawChrome: !
+	print newpage
+	if exists(bannerPath$) then
+		print fields '2,10,P 5/132': bannerPath$&':ISOTROPIC'
+	else
+		print fields '3,10,CC 132': 'A P H E L I O N'
+	end if
+	! The scene art is window #4's own NEWPAGE background (closed and
+	! reopened each time, since that's set at OPEN time, not paintable
+	! afterward) rather than a PICTURE field -- ISOTROPIC still keeps its
+	! aspect ratio (no stretching), but as a background it fills the frame
+	! on its own terms instead of sitting inside a fixed character-cell box.
+	picOpt$=''
+	if exists(artPath$) then picOpt$=',Picture='&artPath$&':ISOTROPIC'
+	close #4:
+	open #4: 'srow=11,scol=30,erow=25,ecol=121,border=s:[APH_BORDER],N=[APH_BG]'&picOpt$, display, outin
+
+	print #1: newpage
+	print #1, border 's:[APH_BORDER]': sheetCaption$
+	print #1, fields '6,2,C 46': 'Memory Fragments:'
+	for fragIdx=1 to 7
+		if frag(fragIdx) then
+			sheetLine$='^'&fragName$(fragIdx)
+		else
+			sheetLine$=fragName$(fragIdx)
+		end if
+		print #1, fields str$(6+fragIdx)&',3,CHECK 45': sheetLine$
+	next fragIdx
+
+	! O2/BPM/Clock each get their own small frame (#5/#6/#7) instead of a
+	! plain text line, sitting side by side across #1's top band.
+	print #5: newpage
+	print #5, border 's:[APH_BORDER]': 'O2'
+	print #5, fields '1,1,CC 13': hudO2$&'%'
+	print #6: newpage
+	print #6, border 's:[APH_BORDER]': 'BPM'
+	print #6, fields '1,1,CC 13': hudBpm$
+	print #7: newpage
+	print #7, border 's:[APH_BORDER]': 'Clock'
+	print #7, fields '1,1,CC 13': hudClock$
+	! Each node sets hudClock$/hudBpm$ as flavor text ('T+HH:MM:SS', a plain
+	! integer), but from here they become live: clockSeconds/bpmValue are
+	! parsed once per node so AskChoice's per-second TickVitals can count
+	! real time upward and drift the pulse, redrawing #6/#7 as it goes.
+	clockSeconds=val(hudClock$(3:4))*3600+val(hudClock$(6:7))*60+val(hudClock$(9:10))
+	bpmValue=val(hudBpm$)
+
+	print #2: newpage
+	print #2, border 's:[APH_BORDER]': locationName$
+	! The story frame's own Narration checkbox (row 1, above the TEXT box)
+	! is actually posted from inside AskChoice, not here -- see the comment
+	! there for why.
+	storyText$=''
+	choiceCount=0
+return
+
+! Appends lineText$ (plus a trailing space, not a line break) to the story
+! window's (#2) text and redraws it in a real multi-line TEXT box -- the
+! box does its own word-wrap at its own (narrower-than-the-window) width,
+! and a node whose prose runs past the visible rows just gets a scrollbar,
+! never an error. Each hand-wrapped lineText$ call is one fragment of a
+! run-on paragraph; gosub Blank (not this) is what actually breaks one.
+Line: !
+	storyText$=storyText$&lineText$&' '
+	print #2, fields '2,1,TEXT 11/60/4000': storyText$
+return
+
+! Breaks the paragraph so far -- a real blank line in the TEXT box.
+Blank: !
+	storyText$=storyText$&chr$(10)&chr$(10)
+	print #2, fields '2,1,TEXT 11/60/4000': storyText$
+return
+
+CollectFrag: !
+	if frag(fragIdx)=0 then
+		frag(fragIdx)=1
+		gosub SaveProgress
+		gosub Blank
+		lineText$='[ fragment recovered: '&fragName$(fragIdx)&' ]' : gosub Line
+	end if
+return
+
+! Writes frag(1..7) as a single line of 7 '0'/'1' characters to saveFile$.
+! Called right after a fragment is newly collected, so the save is always
+! current. Any failure here (read-only %temp%, disk full) is swallowed --
+! this is a bonus, never something that should be able to break the game.
+SaveProgress: !
+	hSaveFile=12
+	open #hSaveFile: 'Name='&saveFile$&',RecL=16,Replace',display,output ioerr SaveXit
+	saveLine$=''
+	for saveIdx=1 to 7
+		if frag(saveIdx) then saveLine$=saveLine$&'1' else saveLine$=saveLine$&'0'
+	next saveIdx
+	print #hSaveFile: saveLine$
+	close #hSaveFile:
+	SaveXit: !
+return
+
+! Reads saveFile$ (if it exists) and sets frag(1..7) from its single line of
+! '0'/'1' characters. Called once at startup, before the title screen's
+! first DrawChrome, so a returning player's checklist already shows what
+! they'd previously recovered. No save file (first run, or file deleted)
+! just leaves every fragment uncollected -- never an error.
+LoadProgress: !
+	for loadIdx=1 to 7
+		frag(loadIdx)=0
+	next loadIdx
+	hLoadFile=12
+	open #hLoadFile: 'Name='&saveFile$,display,input ioerr LoadXit
+	linput #hLoadFile: saveLine$ eof LoadClose
+	for loadIdx=1 to 7
+		if saveLine$(loadIdx:loadIdx)='1' then frag(loadIdx)=1
+	next loadIdx
+	LoadClose: !
+	close #hLoadFile:
+	LoadXit: !
+return
+
+! Queues choiceLabel$ as the next selectable option (row = its own position
+! in the list, 1-based). The field's width is filled in by AskChoice once
+! it knows the longest label in the whole list.
+AddChoice: !
+	choiceCount+=1
+	mat choiceText$(choiceCount)
+	choiceText$(choiceCount)=choiceLabel$
+return
+
+! Paints the queued choices as real Print-Fields buttons (CC ...,,B<fkey>,
+! attributed [APH_SEL] so they read as buttons rather than plain text) in
+! window #3 ("Action"), which this closes and reopens each time sized
+! exactly to the current list: erow fixed at 32, growing upward into the
+! gap below the picture as choiceCount grows, scol centered same as always,
+! row count = number of options, and
+! width = the longest option's text plus a couple of columns, with the
+! buttons themselves centered in that width. Each button gets its own fkey
+! (1000+its position) and, being Print-Fields buttons, can interrupt a
+! wait in any window -- that's a documented power specific to CC buttons,
+! which is why the actual blocking wait can live wherever's convenient. It
+! waits on window #2's own Narration CHECK field instead of a separate
+! throwaway anchor field: the checkbox is itself a real field, so it can
+! just be the thing the RINPUT call blocks on -- no anchor field needed
+! once there's a meaningful field to wait on in the first place. WAIT=1 (a
+! statement-level clause after the field-spec string, not part of it) plus
+! a TIMEOUT trap means that even with nobody touching anything, control
+! comes back once a second so TickVitals can advance the clock and drift
+! the pulse -- see ClockTick. Otherwise loops until one of the button
+! fkeys fires (from #3), Esc/X (FKEY 93 or 99), or the checkbox itself
+! (FKEY 1500). Reads the pick into choice. There's no in-list quit option
+! -- the window's own close (X) button, or Escape, is the universal way
+! out instead.
+AskChoice: !
+	gosub Speak
+	maxLen=0
+	for ci=1 to choiceCount
+		if len(trim$(choiceText$(ci)))>maxLen then maxLen=len(trim$(choiceText$(ci)))
+	next ci
+	! Centered horizontally within the content area (cols 10-141, width
+	! 132), sitting in the gap between the picture (#4, ends row 25) and the
+	! story/Astronaut frames (#1/#2, start row 36) -- erow stays fixed at 32
+	! so its bottom edge never moves, growing upward as choiceCount grows.
+	choiceBoxWidth=maxLen+4
+	choiceScol=10+int((132-choiceBoxWidth)/2)
+	close #3:
+	open #3: 'srow='&str$(32-choiceCount)&',scol='&str$(choiceScol)&',erow=32,ecol='&str$(choiceScol+choiceBoxWidth-1)&',border=s:[APH_BORDER],N=[APH_BG],caption=Action', display, outin
+	for ci=1 to choiceCount
+		print #3, fields str$(ci)&',3,CC '&str$(maxLen)&',[APH_SEL],B'&str$(999+ci): choiceText$(ci)
+	next ci
+	if narrationEnabled then narrationCheck$='^Narration' else narrationCheck$='Narration'
+	AskChoiceWait: !
+	gosub AudioFlush
+	gosub AudioLabel
+	print #2,fields '13,41,CC 20,[APH_SEL],B1501': audioStatus$
+	rinput #2, fields '13,24,CHECK 14,,1500',WAIT=1: narrationCheck$ timeout ClockTick conv AskChoiceWait exit QuitGame
+	if fkey=93 then goto QuitGame ! the window's own close (X) button
+	if fkey=99 then goto QuitGame ! Escape
+	if fkey=1500 then gosub NarrationToggled ! the story frame's own Narration checkbox
+	if fkey=1501 then gosub AudioToggle
+	if fkey<1000 or fkey>999+choiceCount then goto AskChoiceWait
+	choice=fkey-999
+	fn_sfx('select') : gosub AudioFlush
+return
+
+! Fires once a second (the WAIT=1/TIMEOUT on AskChoiceWait's RINPUT) while
+! nobody's clicked anything yet. Advances the real clock and drifts the
+! pulse, then goes straight back to waiting -- never counts as a choice.
+ClockTick: !
+	gosub TickVitals
+	goto AskChoiceWait
+
+! Ticks clockSeconds forward one second and reformats it as hudClock$
+! ('T+HH:MM:SS', zero-padded via CNVRT$'s PIC mask); drifts bpmValue by a
+! random -3..+3 (equally likely to go up, down, or hold), clamped to a
+! plausible human range. Redraws #6/#7 with the new values.
+TickVitals: !
+	clockSeconds=clockSeconds+1
+	hudClock$='T+'&cnvrt$('PIC(##)',int(clockSeconds/3600))&':'&cnvrt$('PIC(##)',mod(int(clockSeconds/60),60))&':'&cnvrt$('PIC(##)',mod(clockSeconds,60))
+	bpmValue=bpmValue+int(rnd*7)-3
+	if bpmValue<40 then bpmValue=40
+	if bpmValue>220 then bpmValue=220
+	hudBpm$=str$(bpmValue)
+	print #6, fields '1,1,CC 13': hudBpm$
+	print #7, fields '1,1,CC 13': hudClock$
+return
+
+! Narrates storyText$ (the node's story text, complete by the time AskChoice
+! runs) aloud via Speak.exe, if present and enabled. Writes the text to a
+! temp file (never onto a command line -- prose can hold quotes, and a
+! command line has a real length limit) and a .cmd that first taskkills any
+! Speak.exe still narrating a previous screen (so clicking a choice early
+! never lets two voices overlap), then calls Speak.exe on the fresh text.
+! SYSTEM -C launches that .cmd asynchronously, so BR never waits for
+! narration to finish. Any failure here (missing tool, file I/O,
+! PowerShell/speech-engine trouble) is swallowed -- this is a bonus, never something
+! that should be able to break the game.
+Speak: !
+	if ~narrationEnabled then return
+	if ~exists(ttsExe$) then return
+	hSpeakFile=10
+	open #hSpeakFile: 'Name='&ttsTextFile$&',RecL=4000,Replace',display,output ioerr SpeakXit
+	print #hSpeakFile: storyText$
+	close #hSpeakFile:
+	hSpeakFile=11
+	open #hSpeakFile: 'Name='&ttsCmdFile$&',RecL=1024,Replace',display,output ioerr SpeakXit
+	print #hSpeakFile: '@echo off'
+	! Stops any still-playing narration from a previous screen first (/T also
+	! kills Speak.exe's own powershell/speech-engine child), so clicking a choice before
+	! the last line finishes narrating can never overlap two voices.
+	print #hSpeakFile: 'taskkill /F /IM Speak.exe /T >nul 2>&1'
+	print #hSpeakFile: chr$(34)&ttsExe$&chr$(34)&' '&chr$(34)&ttsTextFile$&chr$(34)
+	close #hSpeakFile:
+	execute 'system -c -m '&chr$(34)&ttsCmdFile$&chr$(34) error ignore
+	SpeakXit: !
+return
+
+! Fires when the story frame's own Narration checkbox is clicked (fkey 1500,
+! caught in AskChoice's wait loop). Re-reads narrationCheck$'s leading '^'
+! (BR's checked-state sentinel) into narrationEnabled; switching it ON
+! immediately narrates the current screen (storyText$ is already complete
+! by the time AskChoice is waiting), rather than making the player wait for
+! their next choice to hear anything. Switching it OFF kills any narration
+! still playing right now, same as a fresh choice would.
+NarrationToggled: !
+	if narrationCheck$(1:1)='^' then
+		narrationEnabled=1
+		gosub Speak
+	else
+		narrationEnabled=0
+		execute 'system -c -m taskkill /F /IM Speak.exe /T' error ignore
+	end if
+return
+
+InternalMenuError: !
+	gosub Blank
+	lineText$='Internal error: menu choice out of range. Please report this.' : gosub Line
+	goto QuitGame
+
+! Kills any in-flight narration, closes the child windows, then either fully
+! exits (when launched standalone as Aphelion, via aphelion.sys/Aphelion.cmd)
+! or hands off to Proc R, which resets the console/screen state before
+! landing back on the ACS 5 app menu (when launched from inside ACS 5's own
+! Help menu).
+QuitGame: !
+	gosub AudioStop
+	execute 'system -c -m taskkill /F /IM Speak.exe /T' error ignore
+	close #1:
+	close #2:
+	close #3:
+	close #4:
+	close #5:
+	close #6:
+	close #7:
+	if env$('ArcadeReturn')='Yes' then
+		setenv('ArcadeReturn','')
+		chain 'S:\Arcade.br'
+	else if env$('status.config.application_name')='Aphelion' then
+		execute 'system'
+	else
+		execute 'Proc R'
+	end if
+stop
+include: Common\Audio.panda

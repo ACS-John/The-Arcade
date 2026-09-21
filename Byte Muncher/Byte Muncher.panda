@@ -1,0 +1,6 @@
+title$='BYTE MUNCHER'
+gameId$='muncher'
+tagline$='Eat the dots. Turn the tables. Four hunters patrol the neon maze.'
+controls$='ARROWS or W A S D: steer     O: power pellets     P: pause     Q / ESC: return'
+include: Common\Start.panda
+include: Byte Muncher\Rules.panda

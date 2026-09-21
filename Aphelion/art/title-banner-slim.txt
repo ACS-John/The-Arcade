@@ -1,0 +1,6 @@
+Slim title banner: title-banner-slim.png
+Dimensions: 1374 x 145 pixels (approximately 9.5:1).
+Created with built-in image generation, then cropped with System.Drawing with user approval. No stretching or resampling.
+Crop: x=0, y=80, width=1374, height=145.
+Source: exec-bbaa8a86-e827-4836-a7c9-a33c6fcc6b5a.png in the original generated_images directory.
+Prompt: Create a second much skinnier APHELION banner. Luminous APHELION lettering with mint and coral highlights on midnight violet. Clean single line, minimal vertical margins, tiny twin moons beside lettering, faint horizontal nebula trails and a fine orbital line. Preserve the dreamy alien identity; no subtitle or tall scenery.

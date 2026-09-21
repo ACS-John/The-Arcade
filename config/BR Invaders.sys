@@ -1,0 +1,15 @@
+Application_Name BR Invaders
+WorkPath %Temp%
+Drive S,.,X,\
+Console Off
+WorkStack 99999999
+RPNStack 2000
+MaxRecall 99
+Style Keyword lower Expressions lower labels upper Indent 2 0
+FileNames Mixed_Case Search
+Font Courier New
+Shell Limit -1
+Option 26 On
+Option 46 On
+Date never
+Execute Proc config\brinvaders.prc

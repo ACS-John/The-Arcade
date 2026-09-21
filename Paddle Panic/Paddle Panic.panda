@@ -1,0 +1,6 @@
+title$='PADDLE PANIC'
+gameId$='paddle'
+tagline$='A wall of color. One last bounce. Catch WIDE and MULTIBALL capsules.'
+controls$='LEFT / RIGHT or A / D: paddle     SPACE: serve     P: pause     Q / ESC: return'
+include: Common\Start.panda
+include: Paddle Panic\Rules.panda

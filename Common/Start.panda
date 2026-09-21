@@ -1,0 +1,128 @@
+! Shared native BR runtime shell. Game programs supply GameInit/Input/Tick/Render.
+dim pixels$(28,40)*2,oldPixels$(28,40)*2,ink(28,40),oldInk(28,40)
+dim attr$(17)*20,keys$*512,key$*2,field$*100,stateText$*80,lastState$*80
+dim drawFields$(1120)*80,drawValues$(1120)*160,oldSprites$(28,40)*160
+dim title$*40,controls$*100,tagline$*100,gameId$*30,notice$*80
+dim savePath$*260,saveText$*40
+randomize
+gosub Palette
+spriteRoot$='S:\art\sprites\'
+sceneOpt$=',picture=S:\art\'&gameId$&'-scene.png'
+savePath$=env.temp&'\ACS_Arcade_'&gameId$&'_best.txt'
+best=0 : gosub ReadBest
+open #0: 'srow=1,scol=1,rows=44,cols=110,N=[AR_BG],FONT.LABELS=Consolas:modern:medium,FONT.TEXT=Consolas:modern:medium,caption='&title$&sceneOpt$,display,outin
+open #1: 'srow=10,scol=4,rows=28,cols=80,border=s:[AR_CYAN],N=[AR_BG],caption= '&title$&' ',display,outin
+open #2: 'srow=11,scol=87,rows=26,cols=21,border=s:[AR_CYAN],N=[AR_BG],caption= STATUS ',display,outin
+print #0,fields '8,4,C 100,[AR_DIM]': tagline$
+print #2,fields '1,2,C 18,[AR_DIM]': 'SCORE'
+print #2,fields '5,2,C 18,[AR_DIM]': 'BEST'
+print #2,fields '9,2,C 18,[AR_DIM]': 'LIVES'
+print #2,fields '13,2,C 18,[AR_DIM]': 'LEVEL'
+print #2,fields '19,2,C 18': 'ENTER  Start'
+print #2,fields '21,2,C 18': 'P      Pause'
+print #2,fields '23,2,C 18': 'Q/Esc  Return'
+print #0,fields '40,4,C 102,[AR_CYAN]': controls$
+gosub ResetGame
+playing=0 : paused=0 : lastClock=timer : mat oldInk=(-1)
+gosub PaintGame
+if env$('ArcadeSmoke')='Yes' then execute 'system'
+gosub AudioStart
+ArcadeLoop: !
+  soundScore=score : soundLives=lives : soundLevel=level : soundOver=gameOver
+  keys$=kstat$
+  for keyIdx=1 to len(keys$)
+    key$=uprc$(keys$(keyIdx:keyIdx))
+    if keyIdx<len(keys$) then
+      if keys$(keyIdx+1:keyIdx+1)=chr$(0) then
+        key$=keys$(keyIdx:keyIdx+1) : keyIdx=keyIdx+1
+      end if
+    end if
+    if key$='Q' or key$=chr$(27) or key$=hex$('6300') or key$=hex$('5D00') then goto LeaveGame
+    if key$='M' then gosub AudioToggle
+    if key$=chr$(13) then
+      if playing=0 or gameOver then gosub ResetGame : playing=1 : paused=0 : lastClock=timer : fn_sfx('start')
+    else if playing and gameOver=0 then
+      if key$='P' then
+        paused=1-paused : lastClock=timer : fn_sfx('pause')
+      else if paused=0 then
+        gosub GameInput
+        if lives<=0 then gameOver=1
+      end if
+    end if
+  next keyIdx
+  dt=min(.1,max(0,timer-lastClock)) : lastClock=timer
+  if playing and paused=0 and gameOver=0 then
+    gameTime=gameTime+dt
+    gosub GameTick
+    if lives<=0 then gameOver=1
+  end if
+  if score>best then best=score
+  if score>soundScore then
+    if gameId$='muncher' then fn_sfx('pickup') else fn_sfx('impact')
+  end if
+  if lives<soundLives then fn_sfx('lose')
+  if level>soundLevel then fn_sfx('win')
+  if gameOver and soundOver=0 and lives>=soundLives then fn_sfx('lose')
+  gosub AudioFlush
+  gosub PaintGame
+  sleep(.02)
+goto ArcadeLoop
+
+ResetGame: !
+  score=0 : lives=3 : level=1 : gameOver=0 : gameTime=0 : notice$=''
+  gosub GameInit
+return
+PaintGame: ! Diff individual cells; a paused board remains visible.
+  mat pixels$=('  ') : mat ink=(1)
+  gosub GameRender
+  mat drawFields$(1120) : mat drawValues$(1120) : drawCount=0
+  for rr=1 to 28
+    for cc=1 to 40
+      spritePath$=fn_sprite$(pixels$(rr,cc),ink(rr,cc))
+      if spritePath$<>oldSprites$(rr,cc) then
+        drawCount=drawCount+1
+        drawFields$(drawCount)=str$(rr)&','&str$(cc*2-1)&',P 1/2'
+        drawValues$(drawCount)=spritePath$
+        oldSprites$(rr,cc)=spritePath$
+        oldPixels$(rr,cc)=pixels$(rr,cc) : oldInk(rr,cc)=ink(rr,cc)
+      end if
+    next cc
+  next rr
+  if drawCount>0 then
+    mat drawFields$(drawCount) : mat drawValues$(drawCount)
+    print #1,fields mat drawFields$: mat drawValues$
+  end if
+  if score<>lastScore or best<>lastBest or lives<>lastLives or level<>lastLevel or hudReady=0 then
+    print #2,fields '2,2,N 12': score
+    print #2,fields '6,2,N 12': best
+    print #2,fields '10,2,N 12': lives
+    print #2,fields '14,2,N 12': level
+    lastScore=score : lastBest=best : lastLives=lives : lastLevel=level : hudReady=1
+  end if
+  stateText$=notice$
+  if playing=0 then stateText$='PRESS ENTER TO START  /  NO QUARTERS REQUIRED'
+  if paused then stateText$='PAUSED  /  PRESS P TO RESUME'
+  if gameOver then stateText$='GAME OVER  /  ENTER TO RETRY  /  Q TO RETURN'
+  if stateText$<>lastState$ then
+    print #0,fields '42,4,C 100,[AR_PINK]': stateText$
+    lastState$=stateText$
+    if gameOver then gosub WriteBest
+  end if
+  gosub AudioLabel
+  if audioStatus$<>lastAudio$ then print #2,fields '25,2,C 20,[AR_CYAN]': audioStatus$ : lastAudio$=audioStatus$
+return
+dim lastAudio$*22
+LeaveGame: !
+  gosub AudioStop
+  gosub WriteBest
+  close #1:
+  close #2:
+  if env$('ArcadeReturn')='Yes' then
+    setenv('ArcadeReturn','')
+    chain 'S:\Arcade.br'
+  else
+    execute 'system'
+  end if
+stop
+include: Common\Support.panda
+include: Common\Sprites.panda

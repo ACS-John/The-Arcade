@@ -1,0 +1,6 @@
+title$='BR INVADERS'
+gameId$='invaders'
+tagline$='Hold the line. Break the formation. Watch for the bonus saucer.'
+controls$='LEFT / RIGHT or A / D: move     SPACE: fire     P: pause     Q / ESC: return'
+include: Common\Start.panda
+include: BR Invaders\Rules.panda

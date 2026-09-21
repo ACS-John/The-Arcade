@@ -1,0 +1,44 @@
+! Translate the rule renderer's stable cell tokens into original vector sprites.
+dim spriteRoot$*100,spritePath$*160,sceneOpt$*180
+def fn_sprite$*160(token$*2,color;name$*40)
+  name$='empty'
+  if color=9 then name$='wall'
+  if color=10 then name$='water'
+  if color=11 then name$='road'
+  if color=12 then name$='log'
+  if color>=13 then name$='brick'&str$(color-13)&'-'&str$(mod(cc-1,4))
+  if token$='. ' then name$='pellet'
+  if token$='O ' then name$='power'
+  if token$='##' and color=6 then name$='shield'
+  if token$='><' then
+    name$='alien'&str$(max(0,color-3))&'-1'
+    if gameId$='crosswalk' then name$='frog'
+  end if
+  if token$='L>' then name$='alien'&str$(max(0,color-3))&'-0'
+  if token$='R>' then name$='alien'&str$(max(0,color-3))&'-2'
+  if token$='A=' then name$='ship-1'
+  if token$='/=' then name$='ship-0'
+  if token$='\ ' then name$='ship-2'
+  if token$='/\' then name$='ship'
+  if token$='! ' then name$='laser'
+  if token$='v ' then name$='bomb'
+  if token$='<>' then name$='saucer'
+  if token$='()' then
+    name$='ball'
+    if gameId$='bitipede' then name$='worm'
+  end if
+  if token$='W ' then name$='wide'
+  if token$='M ' then name$='multi'
+  if token$='MM' then name$='drone'&str$(max(0,color-3))
+  if token$='C ' then name$='munch'&str$(max(1,munchDir))&'_'&str$(mod(int(gameTime*8),2))
+  if token$='[]' then
+    name$='car'&str$(max(0,color-3))
+    if rr=2 then name$='home'
+  end if
+  if token$='@@' then name$='frog'
+  if token$='..' then name$='grass'
+  if token$='TT' then name$='mushroom'
+  if token$='XX' then name$='spider'
+  if gameId$='paddle' and rr=26 and color=17 then name$='paddle'
+  fn_sprite$=spriteRoot$&name$&'.png'
+fnend

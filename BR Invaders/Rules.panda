@@ -1,0 +1,116 @@
+dim aliens(4,8),shield(40),bombX(3),bombY(3)
+GameInit: !
+  shipX=20 : shotY=0 : invul=0 : saucerX=0 : saucerWait=8 : fireReady=0
+  gosub InvaderWave
+return
+InvaderWave: !
+  mat aliens=(1) : mat bombY=(0) : mat shield=(0)
+  for sx=5 to 35
+    if mod(sx-5,10)<5 then shield(sx)=3
+  next sx
+  alienX=4 : alienY=4 : alienDir=1 : alienClock=0 : bombClock=0 : remaining=32
+  notice$='SPACE TO FIRE / SHIELDS CAN BE DESTROYED'
+return
+GameInput: !
+  if key$='A' or key$=chr$(14) then shipX=max(2,shipX-1)
+  if key$='D' or key$=chr$(12) then shipX=min(39,shipX+1)
+  if key$=' ' and shotY=0 and gameTime>=fireReady then
+    shotX=shipX : shotY=25 : fireReady=gameTime+.18
+    fn_sfx('shot')
+  end if
+return
+GameTick: !
+  invul=max(0,invul-dt)
+  alienClock=alienClock+dt : bombClock=bombClock+dt
+  saucerWait=saucerWait-dt
+  if saucerWait<=0 and saucerX=0 then saucerX=1 : saucerWait=15
+  if saucerX>0 then
+    saucerX=saucerX+dt*8
+    if saucerX>39 then saucerX=0
+  end if
+  if alienClock>=max(.08,.55-.035*(level-1)-.012*(32-remaining)) then
+    alienClock=0 : edge=0
+    for ar=1 to 4
+      for ac=1 to 8
+        if aliens(ar,ac) then
+          ax=alienX+(ac-1)*4 : ay=alienY+(ar-1)*2
+          if ax+alienDir<2 or ax+alienDir>38 then edge=1
+          if ay>=22 then gameOver=1
+        end if
+      next ac
+    next ar
+    if edge then alienDir=-alienDir : alienY=alienY+1 else alienX=alienX+alienDir
+  end if
+  if bombClock>=max(.25,1.1-.08*level) then
+    bombClock=0 : ac=1+int(rnd*8)
+    for bi=1 to 3
+      if bombY(bi)=0 then
+        for ar=4 to 1 step -1
+          if aliens(ar,ac) then
+            bombX(bi)=alienX+(ac-1)*4 : bombY(bi)=alienY+(ar-1)*2+1
+            goto BombCreated
+          end if
+        next ar
+      end if
+    next bi
+  end if
+BombCreated: !
+  if shotY>0 then
+    oldShotY=shotY : shotY=shotY-dt*24
+    if oldShotY>=23 and shotY<=23 then
+      if shield(shotX)>0 then shield(shotX)=shield(shotX)-1 : shotY=0
+    end if
+    if shotY>0 then
+      for ar=4 to 1 step -1
+        for ac=1 to 8
+          ax=alienX+(ac-1)*4 : ay=alienY+(ar-1)*2
+          if aliens(ar,ac) and abs(shotX-ax)<=1 and oldShotY>=ay and shotY<=ay then
+            aliens(ar,ac)=0 : remaining=remaining-1 : score=score+10*(5-ar) : shotY=0
+            goto ShotDone
+          end if
+        next ac
+      next ar
+      if saucerX>0 and abs(shotX-saucerX)<2 and oldShotY>=2 and shotY<=2 then
+        score=score+150 : saucerX=0 : shotY=0 : notice$='BONUS SAUCER +150'
+      end if
+    end if
+ShotDone: !
+    if shotY<1 then shotY=0
+  end if
+  for bi=1 to 3
+    if bombY(bi)>0 then
+      oldBomb=bombY(bi) : bombY(bi)=bombY(bi)+dt*(9+min(8,level))
+      sx=int(bombX(bi)+.5)
+      if sx>=1 and sx<=40 and oldBomb<=23 and bombY(bi)>=23 then
+        if shield(sx)>0 then shield(sx)=shield(sx)-1 : bombY(bi)=0
+      end if
+      if bombY(bi)>=25 and oldBomb<=26 and abs(bombX(bi)-shipX)<=1 and invul=0 then
+        lives=lives-1 : invul=2 : bombY(bi)=0 : shipX=20
+      end if
+      if bombY(bi)>28 then bombY(bi)=0
+    end if
+  next bi
+  if remaining=0 then level=level+1 : score=score+250 : gosub InvaderWave
+return
+GameRender: !
+  for ar=1 to 4
+    for ac=1 to 8
+      if aliens(ar,ac) then
+        fn_dot(alienX+(ac-1)*4-1,alienY+(ar-1)*2,'L>',3+mod(ar,4))
+        fn_dot(alienX+(ac-1)*4,alienY+(ar-1)*2,'><',3+mod(ar,4))
+        fn_dot(alienX+(ac-1)*4+1,alienY+(ar-1)*2,'R>',3+mod(ar,4))
+      end if
+    next ac
+  next ar
+  for sx=1 to 40
+    if shield(sx)>0 then fn_dot(sx,23,'##',6)
+  next sx
+  if invul=0 or mod(int(gameTime*10),2)=0 then
+    fn_dot(shipX-1,26,'/=',3) : fn_dot(shipX,26,'A=',3) : fn_dot(shipX+1,26,'\ ',3)
+  end if
+  if shotY>0 then fn_dot(shotX,shotY,'! ',5)
+  for bi=1 to 3
+    if bombY(bi)>0 then fn_dot(bombX(bi),bombY(bi),'v ',7)
+  next bi
+  if saucerX>0 then fn_dot(saucerX,2,'<>',4)
+return

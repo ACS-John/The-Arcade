@@ -1,0 +1,48 @@
+Palette: ! Shared colors for the five new native games.
+  execute 'config attribute [AR_BG]/#E6EAFB:#080C21'
+  execute 'config attribute [AR_DIM]/#657299:#080C21'
+  execute 'config attribute [AR_CYAN]/#50F2EC:#080C21'
+  execute 'config attribute [AR_PINK]/#FF63CE:#080C21'
+  execute 'config attribute [AR_GOLD]/#FFE37B:#080C21'
+  execute 'config attribute [AR_GREEN]/#81FA9C:#080C21'
+  execute 'config attribute [AR_RED]/#FF687C:#080C21'
+  execute 'config attribute [AR_WHITE]/#FFFFFF:#080C21'
+  execute 'config attribute [AR_WALL]/#4566BB:#101D4E'
+  execute 'config attribute [AR_WATER]/#4EA4DD:#102D53'
+  execute 'config attribute [AR_ROAD]/#74819B:#1B2133'
+  execute 'config attribute [AR_LOG]/#FFD9A2:#855C49'
+  execute 'config attribute [AR_SOLID1]/#080C21:#FF63CE'
+  execute 'config attribute [AR_SOLID2]/#080C21:#FFE37B'
+  execute 'config attribute [AR_SOLID3]/#080C21:#81FA9C'
+  execute 'config attribute [AR_SOLID4]/#080C21:#FF687C'
+  execute 'config attribute [AR_SOLID5]/#080C21:#50F2EC'
+  attr$(1)='[AR_BG]' : attr$(2)='[AR_DIM]' : attr$(3)='[AR_CYAN]'
+  attr$(4)='[AR_PINK]' : attr$(5)='[AR_GOLD]' : attr$(6)='[AR_GREEN]'
+  attr$(7)='[AR_RED]' : attr$(8)='[AR_WHITE]' : attr$(9)='[AR_WALL]'
+  attr$(10)='[AR_WATER]' : attr$(11)='[AR_ROAD]' : attr$(12)='[AR_LOG]'
+  attr$(13)='[AR_SOLID1]' : attr$(14)='[AR_SOLID2]' : attr$(15)='[AR_SOLID3]'
+  attr$(16)='[AR_SOLID4]' : attr$(17)='[AR_SOLID5]'
+return
+def fn_dot(xx,yy,s$*2,tint;rx,ry)
+  rx=int(xx+.5) : ry=int(yy+.5)
+  if rx>=1 and rx<=40 and ry>=1 and ry<=28 then
+    pixels$(ry,rx)=s$ : ink(ry,rx)=tint
+  end if
+  fn_dot=0
+fnend
+ReadBest: !
+  open #12: 'name='&savePath$,display,input ioerr NoBest
+  linput #12: saveText$ eof CloseBest
+  best=max(0,val(saveText$)) conv CloseBest
+CloseBest: !
+  close #12:
+NoBest: !
+return
+WriteBest: !
+  open #12: 'name='&savePath$&',replace',display,output ioerr NoWriteBest
+  print #12: str$(best) ioerr CloseWriteBest
+CloseWriteBest: !
+  close #12: ioerr NoWriteBest
+NoWriteBest: !
+return
+include: Common\Audio.panda

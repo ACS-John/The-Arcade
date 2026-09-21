@@ -1,0 +1,73 @@
+! Session-scoped resident mixer. Rules only queue events; silent tests do no I/O.
+dim audioPath$*260,audioExe$*260,audioEvents$*512,audioMode$*8,audioStatus$*22
+dim audioCmd$*260,audioReport$*180
+AudioStart: ! Start after the initial paint so image loading cannot expire the heartbeat.
+  audioEnabled=0 : audioSeq=0 : audioEvents$=''
+  audioMuted=(env$('ArcadeMuted')=='Yes')
+  if env$('ArcadeSmoke')='Yes' then return
+  audioExe$=os_filename$('S:\Media\ArcadeAudio.exe')
+  if exists(audioExe$)=0 then return
+  audioPath$=env.temp&'\ACS_Arcade_audio_'&session$&'_'&str$(int(rnd*99999999))&'.txt'
+  audioEnabled=1 : audioLast=-999 : audioBorn=timer : audioChecked=timer : gosub AudioFlush
+  audioCmd$=audioPath$&'.cmd'
+  open #18: 'name='&audioCmd$&',recl=1024,replace',display,output ioerr AudioUnavailable
+  print #18: '@echo off'
+  print #18: '"'&audioExe$&'" -mailbox "'&audioPath$&'"'
+  close #18:
+  execute 'system -c -m "'&audioCmd$&'"' error AudioUnavailable
+return
+AudioUnavailable: ! Optional audio must never stop a game.
+  audioEnabled=0
+return
+def fn_sfx(event$*20)
+  fn_sfx=0
+  if audioEnabled and audioMuted=0 and len(audioEvents$)<450 then
+    audioEvents$=audioEvents$&event$&','
+  end if
+fnend
+AudioToggle: ! Shared preference follows the player between games in this BR session.
+  audioMuted=1-audioMuted
+  if audioMuted then setenv('ArcadeMuted','Yes') else setenv('ArcadeMuted','')
+  audioEvents$='' : audioLast=-999
+  fn_sfx('select') : gosub AudioFlush
+return
+AudioFlush: ! One bounded message per frame plus a heartbeat while idle or paused.
+  if audioEnabled=0 then return
+  if audioEvents$='' and timer-audioLast<.6 then return
+  if timer-audioChecked>.6 then gosub AudioHealth
+  if audioEnabled=0 then return
+  audioMode$='play'
+  if audioMuted then audioMode$='mute'
+  gosub AudioWrite
+return
+AudioStop: ! Stop this session's mixer only; no image-name process killing.
+  if audioEnabled=0 then return
+  audioMode$='stop' : audioEvents$='' : gosub AudioWrite : audioEnabled=0
+return
+AudioWrite: ! A closed, newline-terminated record is the commit boundary.
+  audioSeq=audioSeq+1
+  open #18: 'name='&audioPath$&',recl=1024,replace',display,output ioerr AudioWriteDone
+  print #18: str$(audioSeq)&'|'&audioMode$&'|'&audioEvents$ ioerr AudioWriteClose
+AudioWriteClose: !
+  close #18: ioerr AudioWriteDone
+AudioWriteDone: !
+  audioEvents$='' : audioLast=timer
+return
+AudioLabel: !
+  audioStatus$='M  SOUND ON'
+  if audioMuted then audioStatus$='M  SOUND OFF'
+  if audioEnabled=0 then audioStatus$='SOUND UNAVAILABLE'
+return
+AudioHealth: ! Report device/launch failures honestly while leaving gameplay available.
+  audioChecked=timer
+  if exists(audioPath$&'.log')=0 then
+    if timer-audioBorn>5 then audioEnabled=0
+    return
+  end if
+  open #19: 'name='&audioPath$&'.log',display,input ioerr AudioHealthDone
+  linput #19: audioReport$ eof AudioHealthClose ioerr AudioHealthClose
+  if audioReport$(1:5)='ERROR' or audioReport$(1:7)='STOPPED' then audioEnabled=0
+AudioHealthClose: !
+  close #19: ioerr AudioHealthDone
+AudioHealthDone: !
+return

@@ -1,0 +1,97 @@
+dim mushrooms(28,40),wormX(18),wormY(18),wormDir(18),wormDY(18),wormOn(18),wormBottom(18)
+GameInit: !
+  gunX=20 : gunY=27 : bulletY=0 : invul=0 : spiderX=0 : spiderClock=0
+  mat mushrooms=(0)
+  for plant=1 to 65
+    mushrooms(3+int(rnd*20),2+int(rnd*38))=3
+  next plant
+  gosub WormWave
+return
+WormWave: ! Segments move independently after splitting around mushrooms.
+  wormCount=min(18,10+level) : mat wormOn=(0) : mat wormBottom=(0)
+  for segment=1 to wormCount
+    wormX(segment)=40-(segment-1)*2 : wormY(segment)=1
+    wormDir(segment)=-1 : wormDY(segment)=1 : wormOn(segment)=1
+  next segment
+  wormClock=0 : notice$='SHOOT THE SWARM / DESTROY MUSHROOMS TO OPEN FIRING LANES'
+return
+GameInput: !
+  if key$='A' or key$=chr$(14) then gunX=max(1,gunX-1)
+  if key$='D' or key$=chr$(12) then gunX=min(40,gunX+1)
+  if key$='W' or key$=chr$(11) then gunY=max(24,gunY-1)
+  if key$='S' or key$=chr$(10) then gunY=min(28,gunY+1)
+  if key$=' ' and bulletY=0 then bulletX=gunX : bulletY=gunY-1 : fn_sfx('shot')
+return
+GameTick: !
+  invul=max(0,invul-dt) : wormClock=wormClock+dt : spiderClock=spiderClock+dt
+  if wormClock>=max(.07,.22-.012*level) then
+    wormClock=0
+    for segment=1 to wormCount
+      if wormOn(segment) then
+        wx=wormX(segment)+wormDir(segment) : wy=wormY(segment) : turnWorm=0
+        if wx<1 or wx>40 then
+          turnWorm=1
+        else if mushrooms(wy,wx)>0 then
+          turnWorm=1
+        end if
+        if turnWorm then
+          wormDir(segment)=-wormDir(segment)
+          wormY(segment)=wormY(segment)+wormDY(segment)
+          if wormY(segment)>=28 then wormY(segment)=28 : wormDY(segment)=-1 : wormBottom(segment)=1
+          if wormBottom(segment) and wormY(segment)<=24 then wormY(segment)=24 : wormDY(segment)=1
+        else
+          wormX(segment)=wx
+        end if
+      end if
+    next segment
+  end if
+  if spiderClock>=8 and spiderX=0 then spiderX=1 : spiderClock=0
+  if spiderX>0 then
+    spiderX=spiderX+dt*(7+level) : spiderY=26+int(2*sin(gameTime*4))
+    if spiderX>40 then spiderX=0
+  end if
+  if bulletY>0 then
+    oldBullet=bulletY : bulletY=bulletY-dt*30
+    for bulletRow=min(28,int(oldBullet+.5)) to max(1,int(bulletY+.5)) step -1
+      if mushrooms(bulletRow,bulletX)>0 then
+        mushrooms(bulletRow,bulletX)=mushrooms(bulletRow,bulletX)-1 : bulletY=0
+        if mushrooms(bulletRow,bulletX)=0 then score=score+5
+        goto BulletDone
+      end if
+      for segment=1 to wormCount
+        if wormOn(segment) and wormX(segment)=bulletX and wormY(segment)=bulletRow then
+          wormOn(segment)=0 : mushrooms(bulletRow,bulletX)=3 : score=score+25 : bulletY=0
+          goto BulletDone
+        end if
+      next segment
+      if spiderX>0 and abs(spiderX-bulletX)<2 and abs(spiderY-bulletRow)<1 then
+        spiderX=0 : bulletY=0 : score=score+200 : goto BulletDone
+      end if
+    next bulletRow
+BulletDone: !
+    if bulletY<1 then bulletY=0
+  end if
+  hit=0 : aliveSegments=0
+  for segment=1 to wormCount
+    if wormOn(segment) then
+      aliveSegments=aliveSegments+1
+      if abs(wormX(segment)-gunX)<1.5 and abs(wormY(segment)-gunY)<1 then hit=1
+    end if
+  next segment
+  if spiderX>0 and abs(spiderX-gunX)<2 and abs(spiderY-gunY)<1 then hit=1
+  if hit and invul=0 then lives=lives-1 : invul=2 : gunX=20 : gunY=28
+  if aliveSegments=0 then level=level+1 : score=score+300 : gosub WormWave
+return
+GameRender: !
+  for wr=1 to 28
+    for wc=1 to 40
+      if mushrooms(wr,wc)>0 then fn_dot(wc,wr,'TT',4)
+    next wc
+  next wr
+  for segment=1 to wormCount
+    if wormOn(segment) then fn_dot(wormX(segment),wormY(segment),'()',6)
+  next segment
+  if spiderX>0 then fn_dot(spiderX,spiderY,'XX',7)
+  if bulletY>0 then fn_dot(bulletX,bulletY,'! ',5)
+  if invul=0 or mod(int(gameTime*10),2)=0 then fn_dot(gunX,gunY,'/\',3)
+return
