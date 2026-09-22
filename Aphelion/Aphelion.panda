@@ -721,7 +721,7 @@ Speak: !
 	print #hSpeakFile: 'taskkill /F /IM Speak.exe /T >nul 2>&1'
 	print #hSpeakFile: chr$(34)&ttsExe$&chr$(34)&' '&chr$(34)&ttsTextFile$&chr$(34)
 	close #hSpeakFile:
-	execute 'system -c -m '&chr$(34)&ttsCmdFile$&chr$(34) error ignore
+	execute 'system -c -M '&chr$(34)&ttsCmdFile$&chr$(34) error ignore
 	SpeakXit: !
 return
 
@@ -738,7 +738,7 @@ NarrationToggled: !
 		gosub Speak
 	else
 		narrationEnabled=0
-		execute 'system -c -m taskkill /F /IM Speak.exe /T' error ignore
+		execute 'system -c -M taskkill /F /IM Speak.exe /T' error ignore
 	end if
 return
 
@@ -754,7 +754,7 @@ InternalMenuError: !
 ! Help menu).
 QuitGame: !
 	gosub AudioStop
-	execute 'system -c -m taskkill /F /IM Speak.exe /T' error ignore
+	execute 'system -c -M taskkill /F /IM Speak.exe /T' error ignore
 	close #1:
 	close #2:
 	close #3:

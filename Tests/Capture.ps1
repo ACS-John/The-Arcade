@@ -10,7 +10,7 @@ public class ArcadeCapture {
 }
 "@
 $gameProc=Get-Process -Id $GameProcessId
-if($gameProc.ProcessName -notin @('ACS 5','Qix')) { throw 'Only capture the selected BR test process' }
+if($gameProc.ProcessName -notin @('ACS 5','br','Qix')) { throw 'Only capture the selected BR test process' }
 $rect=New-Object ArcadeCapture+RECT
 [ArcadeCapture]::GetWindowRect($gameProc.MainWindowHandle,[ref]$rect) | Out-Null
 $bmp=New-Object Drawing.Bitmap ($rect.Right-$rect.Left),($rect.Bottom-$rect.Top)

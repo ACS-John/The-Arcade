@@ -1,10 +1,9 @@
 @echo off
 setlocal
 cd /d "%~dp0"
+if exist "%~dp0Arcade.exe" set "ARCADE_BR_EXE=%~dp0Arcade.exe"
 if defined ARCADE_BR_EXE goto configured
-if exist "%~dp0runtime\br.exe" set "ARCADE_BR_EXE=%~dp0runtime\br.exe"
-if defined ARCADE_BR_EXE goto configured
-if exist "%~dp0..\Dev-5\ACS 5.exe" set "ARCADE_BR_EXE=%~dp0..\Dev-5\ACS 5.exe"
+if exist "%~dp0runtime\Arcade.exe" set "ARCADE_BR_EXE=%~dp0runtime\Arcade.exe"
 :configured
 if not defined ARCADE_BR_EXE goto missing
 if not exist "%ARCADE_BR_EXE%" goto missing
@@ -13,7 +12,7 @@ start "%~1" "%ARCADE_BR_EXE%" -"%~dp0config\%~1.sys"
 exit /b 0
 :missing
 echo The Arcade needs an installed, licensed Business Rules! runtime.
-echo Set ARCADE_BR_EXE to its executable, or put your runtime in runtime\br.exe.
+echo Put Arcade.exe beside Launch.cmd, or set ARCADE_BR_EXE to your runtime.
 echo See README.md for setup. Runtime and license files are not included.
 pause
 exit /b 1

@@ -14,7 +14,7 @@ public class ArcadeNative {
 }
 "@
 $gameProc=Get-Process -Id $GameProcessId
-if($gameProc.ProcessName -ne 'ACS 5') {throw 'Only the selected BR test process may receive input'}
+if($gameProc.ProcessName -notin @('ACS 5','br')) {throw 'Only the selected BR test process may receive input'}
 $handle=$gameProc.MainWindowHandle
 if($ButtonTitle) {
  $deadline=[DateTime]::UtcNow.AddSeconds(10)

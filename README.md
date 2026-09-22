@@ -8,7 +8,7 @@ Start **Arcade.cmd**, then click a game or type its number and press Enter. Ever
 
 The Windows game binaries, original artwork, and sound effects are included. Clone or download this repository into a folder such as **C:\ACS\The Arcade**.
 
-The seven BR games and the Arcade menu require a separately installed, licensed Business Rules! runtime. That proprietary runtime and its license are not included and are not covered by this project's Unlicense. Set the ARCADE_BR_EXE environment variable to your runtime executable. The launchers also recognize runtime\br.exe or an adjacent Dev-5\ACS 5.exe installation. No accounting application is started.
+The seven BR games and the Arcade menu require a separately installed, licensed Business Rules! runtime. That proprietary runtime and its license are not included and are not covered by this project's Unlicense. Place br.exe beside Launch.cmd; this local copy takes priority. Otherwise set the ARCADE_BR_EXE environment variable to your runtime executable. The launchers also recognize runtime\br.exe or an adjacent Dev-5\ACS 5.exe installation. No accounting application is started.
 
 Qix needs Windows and the included Qix\Qix.exe and Media\ArcadeAudio.exe. Playing does not require Go, Node.js, downloads, or an account.
 

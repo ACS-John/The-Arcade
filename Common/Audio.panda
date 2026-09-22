@@ -14,7 +14,7 @@ AudioStart: ! Start after the initial paint so image loading cannot expire the h
   print #18: '@echo off'
   print #18: '"'&audioExe$&'" -mailbox "'&audioPath$&'"'
   close #18:
-  execute 'system -c -m "'&audioCmd$&'"' error AudioUnavailable
+  execute 'system -c -M "'&audioCmd$&'"' error AudioUnavailable
 return
 AudioUnavailable: ! Optional audio must never stop a game.
   audioEnabled=0

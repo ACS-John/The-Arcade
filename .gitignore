@@ -19,3 +19,7 @@ build-files.txt
 Bitris/Tests.br
 *.test.exe
 coverage.out
+
+/br.exe
+wbserver.dat
+Mall After Hours/
